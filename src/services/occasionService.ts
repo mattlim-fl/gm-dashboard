@@ -60,6 +60,14 @@ function generateToken(prefix: string): string {
   return `${prefix}-${randomPart}`;
 }
 
+// Generate a guest list token (simple random token for occasions)
+function generateGuestListToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length: 32 }, () => 
+    chars.charAt(Math.floor(Math.random() * chars.length))
+  ).join('');
+}
+
 export const occasionService = {
   /**
    * Create a new occasion (as an organiser booking)
@@ -74,6 +82,7 @@ export const occasionService = {
     // Generate tokens
     const organiserToken = generateToken('ORG');
     const shareToken = generateToken('OCC');
+    const guestListToken = generateGuestListToken();
 
     const bookingData = {
       booking_type: 'occasion',
@@ -89,6 +98,7 @@ export const occasionService = {
       customer_phone: input.organiser_phone || null,
       organiser_token: organiserToken,
       share_token: shareToken,
+      guest_list_token: guestListToken,
       staff_notes: input.notes || null,
       status: 'confirmed',
       payment_status: 'paid', // Organiser booking is "free"

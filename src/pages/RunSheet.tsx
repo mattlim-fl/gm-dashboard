@@ -141,14 +141,23 @@ export default function RunSheet() {
     search: search || undefined,
   }), [venue, selectedDate, search]);
 
+  const occasionFilters = useMemo(() => ({
+    bookingType: 'occasion',
+    venue: venue === 'all' ? undefined : venue,
+    dateFrom: selectedDate,
+    dateTo: selectedDate,
+    search: search || undefined,
+  }), [venue, selectedDate, search]);
+
   const { data: vipBookings = [], isLoading: loadingVip } = useBookings(guestFilters as any);
   const { data: karaokeBookings = [], isLoading: loadingKaraoke } = useBookings(karaokeFilters as any);
+  const { data: occasionBookings = [], isLoading: loadingOccasions } = useBookings(occasionFilters as any);
 
-  // Fetch guest lists for all bookings (VIP and karaoke)
+  // Fetch guest lists for all bookings (VIP, karaoke, and occasions)
   // booking_guests is now the source of truth for who needs entry
   useEffect(() => {
     const fetchGuestLists = async () => {
-      const allBookings = [...vipBookings, ...karaokeBookings];
+      const allBookings = [...vipBookings, ...karaokeBookings, ...occasionBookings];
       if (allBookings.length === 0) {
         setGuestLists({});
         return;
@@ -196,7 +205,7 @@ export default function RunSheet() {
     };
 
     fetchGuestLists();
-  }, [vipBookings, karaokeBookings]);
+  }, [vipBookings, karaokeBookings, occasionBookings]);
 
   // Fetch booth names for karaoke bookings
   useEffect(() => {
@@ -227,7 +236,7 @@ export default function RunSheet() {
     fetchBoothNames();
   }, [karaokeBookings]);
 
-  // Stats - combine VIP tickets and karaoke guests
+  // Stats - combine VIP tickets, karaoke guests, and occasion guests
   // Use booking_guests as source of truth
   const totalVipTickets = useMemo(() => {
     return vipBookings.reduce((sum, b) => {
@@ -259,6 +268,22 @@ export default function RunSheet() {
     }, 0);
   }, [karaokeBookings, attendance.karaoke]);
 
+  // Calculate occasion stats based on booking_guests entries (source of truth)
+  const totalOccasionGuests = useMemo(() => {
+    return occasionBookings.reduce((sum, b) => {
+      const guests = guestLists[b.id] || [];
+      return sum + guests.length;
+    }, 0);
+  }, [occasionBookings, guestLists]);
+
+  const checkedOccasionGuests = useMemo(() => {
+    return occasionBookings.reduce((sum, b) => {
+      const checkins = attendance.karaoke[b.id] || []; // Use karaoke attendance for occasions
+      if (Array.isArray(checkins)) return sum + checkins.filter(Boolean).length;
+      return sum;
+    }, 0);
+  }, [occasionBookings, attendance.karaoke]);
+
   // Calculate karaoke booking stats (for Karaoke tab - counts bookings, not guests)
   const checkedKaraokeBookings = useMemo(() => {
     return karaokeBookings.filter(b => {
@@ -268,8 +293,8 @@ export default function RunSheet() {
   }, [karaokeBookings, attendance.karaoke]);
 
   // Combined stats for Guests tab
-  const totalGuests = totalVipTickets + totalKaraokeGuests;
-  const checkedGuests = checkedVipTickets + checkedKaraokeGuests;
+  const totalGuests = totalVipTickets + totalKaraokeGuests + totalOccasionGuests;
+  const checkedGuests = checkedVipTickets + checkedKaraokeGuests + checkedOccasionGuests;
   const guestsPercent = totalGuests > 0 ? Math.round((checkedGuests / totalGuests) * 100) : 0;
   
   const vipPercent = totalVipTickets > 0 ? Math.round((checkedVipTickets / totalVipTickets) * 100) : 0;
@@ -326,6 +351,24 @@ export default function RunSheet() {
       });
     });
 
+    // Add occasion guests from booking_guests
+    occasionBookings.forEach(booking => {
+      const guests = guestLists[booking.id] || [];
+      guests.forEach((guest, i) => {
+        rows.push({
+          id: `${booking.id}-${i}`,
+          guestEntryId: guest.id,
+          guestName: guest.guest_name || `Guest #${i + 1}`,
+          isOrganiser: guest.is_organiser,
+          reference: booking.reference_code || 'NO-REF',
+          bookingId: booking.id,
+          guestIndex: i,
+          isVip: false, // Use same check-in system as karaoke
+          booking,
+        });
+      });
+    });
+
     // Sort: organisers first within each reference, then by name
     return rows.sort((a, b) => {
       // First sort by reference
@@ -337,7 +380,7 @@ export default function RunSheet() {
       // Then by name
       return a.guestName.localeCompare(b.guestName);
     });
-  }, [vipBookings, karaokeBookings, guestLists]);
+  }, [vipBookings, karaokeBookings, occasionBookings, guestLists]);
 
   const isToday = selectedDate === formatDateToISO(new Date());
 
@@ -595,7 +638,7 @@ export default function RunSheet() {
         <div className="space-y-4 min-h-[50vh]">
           {activeTab === 'guests' && (
             <Card className="overflow-hidden">
-              {allGuestRows.length === 0 && !loadingVip && !loadingKaraoke ? (
+              {allGuestRows.length === 0 && !loadingVip && !loadingKaraoke && !loadingOccasions ? (
                 <div className="text-center py-10 text-muted-foreground">No guests found for this date.</div>
               ) : (
                 <div className="divide-y">
