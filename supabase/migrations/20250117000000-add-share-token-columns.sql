@@ -12,3 +12,5 @@ CREATE INDEX IF NOT EXISTS idx_bookings_parent_booking_id ON bookings(parent_boo
 COMMENT ON COLUMN bookings.share_token IS 'Unique shareable token for group ticket purchases (e.g., ABC123XYZ)';
 COMMENT ON COLUMN bookings.parent_booking_id IS 'Reference to organiser booking for guest ticket purchases';
 
+
+

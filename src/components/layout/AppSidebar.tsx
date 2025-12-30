@@ -11,7 +11,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Home, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, Calendar } from "lucide-react";
+import { Home, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, Calendar, PartyPopper } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { LastSyncIndicator } from "./LastSyncIndicator";
@@ -49,6 +49,11 @@ const operationsItems = [
     title: "Bookings",
     url: "/bookings",
     icon: CalendarDays,
+  },
+  {
+    title: "Occasions",
+    url: "/occasions",
+    icon: PartyPopper,
   },
   {
     title: "Customers",

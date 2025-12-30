@@ -50,20 +50,6 @@ function formatDateAU(iso?: string): string {
   }
 }
 
-function formatTime12h(time24?: string): string {
-  if (!time24) return ''
-  try {
-    // Handle HH:MM:SS or HH:MM format
-    const [hours, minutes] = String(time24).slice(0, 5).split(':').map(Number)
-    if (isNaN(hours) || isNaN(minutes)) return String(time24)
-    const period = hours >= 12 ? 'PM' : 'AM'
-    const hour12 = hours % 12 || 12
-    return `${hour12}:${String(minutes).padStart(2, '0')} ${period}`
-  } catch {
-    return String(time24)
-  }
-}
-
 function getGuestListBaseUrl(overrideOrigin?: string | null): string {
   // Allow caller to override (e.g. for local dev)
   if (overrideOrigin && typeof overrideOrigin === 'string' && overrideOrigin.trim()) {
@@ -189,16 +175,7 @@ function renderKaraokeConfirmationHTML(data: Record<string, unknown>): string {
   const startTime = String(get(data, 'startTime') ?? '')
   const endTime = String(get(data, 'endTime') ?? '')
   const guestCount = String(get(data, 'guestCount') ?? '')
-  const boothName = String(get(data, 'boothName') ?? '')
   const guestListUrl = String(get(data, 'guestListUrl') ?? '') || ''
-
-  // Format date and times for display
-  const formattedDate = formatDateAU(bookingDate)
-  const formattedStartTime = formatTime12h(startTime)
-  const formattedEndTime = formatTime12h(endTime)
-  const formattedTimeRange = formattedStartTime && formattedEndTime 
-    ? `${formattedStartTime} - ${formattedEndTime}`
-    : `${startTime} - ${endTime}`
 
   return `
   <!DOCTYPE html>
@@ -220,10 +197,7 @@ function renderKaraokeConfirmationHTML(data: Record<string, unknown>): string {
         .detail-row:last-child { border-bottom: none; margin-bottom: 0; }
         .detail-label { font-weight: 600; color: #495057; }
         .detail-value { color: #6c757d; }
-        .guest-list-cta { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); border-radius: 12px; padding: 24px; margin: 25px 0; text-align: center; }
-        .guest-list-cta h3 { margin: 0 0 12px 0; color: white; font-size: 18px; }
-        .guest-list-cta p { margin: 0 0 20px 0; color: rgba(255,255,255,0.9); font-size: 14px; }
-        .guest-list-cta a { display: inline-block; padding: 14px 32px; border-radius: 8px; background-color: white; color: #ee5a24; text-decoration: none; font-weight: 700; font-size: 16px; }
+        .message { background: #e7f3ff; border-left: 4px solid #007bff; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; }
         .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e9ecef; color: #6c757d; font-size: 14px; }
         .karaoke-highlight { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; }
       </style>
@@ -249,19 +223,22 @@ function renderKaraokeConfirmationHTML(data: Record<string, unknown>): string {
 
         <div class="booking-details">
           <h3 style="margin-top:0;color:#333;">Booking Details</h3>
-          <div class="detail-row"><span class="detail-label">Date:</span><span class="detail-value">${formattedDate}</span></div>
-          <div class="detail-row"><span class="detail-label">Time:</span><span class="detail-value">${formattedTimeRange}</span></div>
-          ${boothName ? `<div class="detail-row"><span class="detail-label">Booth:</span><span class="detail-value">${boothName}</span></div>` : ''}
-          <div class="detail-row"><span class="detail-label">Guests:</span><span class="detail-value">${guestCount} people</span></div>
+          <div class="detail-row"><span class="detail-label">Date:</span><span class="detail-value">${bookingDate}</span></div>
+          <div class="detail-row"><span class="detail-label">Time:</span><span class="detail-value">${startTime} - ${endTime}</span></div>
+          <div class="detail-row"><span class="detail-label">Capacity:</span><span class="detail-value">${guestCount} people</span></div>
         </div>
 
         ${
           guestListUrl
             ? `
-        <div class="guest-list-cta">
-          <h3>📋 Add Your Guest Names</h3>
-          <p>Make sure your guests get in smoothly! Add their names to your booking so they're on the door list when they arrive.</p>
-          <a href="${guestListUrl}">Add Guest Names</a>
+        <div class="message">
+          <strong>Curate your guest list</strong><br/>
+          Add the names of your guests so they're on the door when they arrive.
+          <div style="margin-top:16px;text-align:center;">
+            <a href="${guestListUrl}" style="display:inline-block;padding:10px 18px;border-radius:999px;background-color:#0d6efd;color:#fff;text-decoration:none;font-weight:600;">
+              Curate your guest list
+            </a>
+          </div>
         </div>
         `
             : ''
@@ -376,6 +353,159 @@ function renderStaffInviteHTML(data: Record<string, unknown>): string {
   `
 }
 
+function renderOccasionOrganiserHTML(data: Record<string, unknown>): string {
+  const organiserName = String(get(data, 'organiserName') ?? '')
+  const occasionName = String(get(data, 'occasionName') ?? '')
+  const occasionDate = formatDateAU(String(get(data, 'occasionDate') ?? ''))
+  const venue = String(get(data, 'venue') ?? 'Manor')
+  const capacity = String(get(data, 'capacity') ?? '')
+  const organiserUrl = String(get(data, 'organiserUrl') ?? '')
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Occasion Created - ${occasionName}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo { font-size: 28px; font-weight: bold; color: #8B4513; margin-bottom: 10px; }
+        .occasion-highlight { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
+        .booking-details { background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 25px 0; }
+        .detail-row { display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e9ecef; }
+        .detail-row:last-child { border-bottom: none; margin-bottom: 0; }
+        .detail-label { font-weight: 600; color: #495057; }
+        .detail-value { color: #6c757d; }
+        .cta-button { display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e9ecef; color: #6c757d; font-size: 14px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">MANOR</div>
+          <h1 style="margin:0;color:#333;font-size:24px;">Your Occasion is Ready!</h1>
+        </div>
+
+        <div class="occasion-highlight">
+          <h2 style="margin:0;font-size:20px;">🎉 ${occasionName}</h2>
+        </div>
+
+        <p>Hi ${organiserName},</p>
+        <p>Your occasion has been created! You can now manage your guest list and share the link with friends to purchase tickets.</p>
+
+        <div class="booking-details">
+          <h3 style="margin-top:0;color:#333;">Occasion Details</h3>
+          <div class="detail-row"><span class="detail-label">Venue:</span><span class="detail-value">${venue}</span></div>
+          <div class="detail-row"><span class="detail-label">Date:</span><span class="detail-value">${occasionDate}</span></div>
+          <div class="detail-row"><span class="detail-label">Capacity:</span><span class="detail-value">${capacity} guests</span></div>
+        </div>
+
+        <div style="text-align:center;">
+          <a href="${organiserUrl}" class="cta-button">Manage Your Guest List</a>
+        </div>
+
+        <p style="margin-top:30px;"><strong>What you can do:</strong></p>
+        <ul>
+          <li>Add and manage guest names for the door list</li>
+          <li>Share a link with friends so they can purchase their own tickets</li>
+          <li>Track how many spots are remaining</li>
+        </ul>
+
+        <div class="footer">
+          <p>Questions? Contact us at ${venue === 'Manor' ? 'bookings@manorperth.com.au' : 'info@hippie-club.com'}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}
+
+function renderOccasionTicketConfirmationHTML(data: Record<string, unknown>): string {
+  const customerName = String(get(data, 'customerName') ?? '')
+  const referenceCode = String(get(data, 'referenceCode') ?? '')
+  const occasionName = String(get(data, 'occasionName') ?? '')
+  const occasionDate = formatDateAU(String(get(data, 'occasionDate') ?? ''))
+  const venue = String(get(data, 'venue') ?? 'Manor')
+  const ticketQuantity = String(get(data, 'ticketQuantity') ?? '1')
+  const ticketPrice = String(get(data, 'ticketPrice') ?? '10.00')
+  const totalAmount = String(get(data, 'totalAmount') ?? '')
+  const guestListUrl = String(get(data, 'guestListUrl') ?? '')
+  const organiserName = String(get(data, 'organiserName') ?? '')
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Ticket Confirmation - ${occasionName}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo { font-size: 28px; font-weight: bold; color: #8B4513; margin-bottom: 10px; }
+        .reference-code { background: linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%); border: 2px solid #dee2e6; border-radius: 12px; padding: 20px; text-align: center; margin: 25px 0; }
+        .reference-code-label { font-size: 14px; font-weight: 600; color: #6c757d; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+        .reference-code-value { font-size: 24px; font-weight: bold; font-family: 'Courier New', monospace; color: #495057; letter-spacing: 2px; }
+        .booking-details { background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 25px 0; }
+        .detail-row { display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e9ecef; }
+        .detail-row:last-child { border-bottom: none; margin-bottom: 0; }
+        .detail-label { font-weight: 600; color: #495057; }
+        .detail-value { color: #6c757d; }
+        .message { background: #e7f3ff; border-left: 4px solid #007bff; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; }
+        .cta-button { display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; }
+        .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e9ecef; color: #6c757d; font-size: 14px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">MANOR</div>
+          <h1 style="margin:0;color:#333;font-size:24px;">Ticket Confirmed!</h1>
+        </div>
+
+        <p>Hi ${customerName},</p>
+        <p>You're all set for <strong>${occasionName}</strong>${organiserName ? ` with ${organiserName}` : ''}!</p>
+
+        <div class="reference-code">
+          <div class="reference-code-label">Reference Code</div>
+          <div class="reference-code-value">${referenceCode}</div>
+        </div>
+
+        <div class="booking-details">
+          <h3 style="margin-top:0;color:#333;">Booking Details</h3>
+          <div class="detail-row"><span class="detail-label">Occasion:</span><span class="detail-value">${occasionName}</span></div>
+          <div class="detail-row"><span class="detail-label">Venue:</span><span class="detail-value">${venue}</span></div>
+          <div class="detail-row"><span class="detail-label">Date:</span><span class="detail-value">${occasionDate}</span></div>
+          <div class="detail-row"><span class="detail-label">Tickets:</span><span class="detail-value">${ticketQuantity} × $${ticketPrice}</span></div>
+          <div class="detail-row"><span class="detail-label">Total Paid:</span><span class="detail-value">$${totalAmount}</span></div>
+        </div>
+
+        ${guestListUrl ? `
+        <div class="message">
+          <strong>Add your guests to the door list</strong><br/>
+          Enter the names of everyone in your group so they're on the door when they arrive.
+          <div style="margin-top:16px;text-align:center;">
+            <a href="${guestListUrl}" class="cta-button">Manage Guest List</a>
+          </div>
+        </div>
+        ` : ''}
+
+        <p>Make sure everyone brings valid ID. See you there!</p>
+
+        <div class="footer">
+          <p style="margin-top:20px;font-size:12px;color:#adb5bd;">This email was sent to ${String(get(data, 'customerEmail') ?? '')} to confirm your ticket purchase.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders })
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
@@ -446,6 +576,10 @@ serve(async (req: Request) => {
         html = renderVenueInternalNotificationHTML(payload.data || {})
       } else if (tplName === 'staff-invite') {
         html = renderStaffInviteHTML(payload.data || {})
+      } else if (tplName === 'occasion-organiser-confirmation') {
+        html = renderOccasionOrganiserHTML(payload.data || {})
+      } else if (tplName === 'occasion-ticket-confirmation') {
+        html = renderOccasionTicketConfirmationHTML(payload.data || {})
       }
     }
     if (!html) return json({ success: false, error: "Missing email HTML content" }, 400)
@@ -464,8 +598,12 @@ serve(async (req: Request) => {
           tplName === 'karaoke-confirmation'
             ? 'Karaoke Booking Confirmation - Manor Perth'
             : tplName === 'staff-invite'
-              ? "You've been invited to GM Staff Portal"
-              : 'Booking Confirmation - Manor Perth'
+              ? 'You've been invited to GM Staff Portal'
+              : tplName === 'occasion-organiser-confirmation'
+                ? `Your Occasion is Ready - ${String(get(payload.data || {}, 'occasionName') || 'Manor')}`
+                : tplName === 'occasion-ticket-confirmation'
+                  ? `Ticket Confirmed - ${String(get(payload.data || {}, 'occasionName') || 'Manor')}`
+                  : 'Booking Confirmation - Manor Perth'
         ),
         html,
         reply_to: replyTo,

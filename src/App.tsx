@@ -24,6 +24,7 @@ import Revenue from "./pages/Revenue";
 import BoothManagement from "./pages/BoothManagement";
 import ProfitAndLoss from "./pages/ProfitAndLoss";
 import Team from "./pages/Team";
+import Occasions from "./pages/Occasions";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdmin } from "@/lib/permissions";
 
@@ -92,6 +93,11 @@ const App = () => (
               <Route path="/customers" element={
                 <ProtectedRoute>
                   <Customers />
+                </ProtectedRoute>
+              } />
+              <Route path="/occasions" element={
+                <ProtectedRoute>
+                  <Occasions />
                 </ProtectedRoute>
               } />
               <Route path="/revenue" element={
