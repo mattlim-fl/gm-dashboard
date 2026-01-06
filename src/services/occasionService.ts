@@ -308,13 +308,113 @@ export const occasionService = {
   },
 
   /**
+   * Update booking guests for a specific booking
+   */
+  async updateBookingGuests(bookingId: string, guestNames: string[]) {
+    // Delete existing guests for this booking
+    const { error: deleteError } = await supabase
+      .from('booking_guests')
+      .delete()
+      .eq('booking_id', bookingId);
+
+    if (deleteError) {
+      throw new Error(`Failed to delete existing guests: ${deleteError.message}`);
+    }
+
+    // Insert new guest names (only non-empty ones)
+    const cleanedNames = guestNames.filter(n => n.trim().length > 0);
+    if (cleanedNames.length > 0) {
+      const toInsert = cleanedNames.map((name) => ({
+        booking_id: bookingId,
+        guest_name: name.trim(),
+      }));
+
+      const { error: insertError } = await supabase
+        .from('booking_guests')
+        .insert(toInsert);
+
+      if (insertError) {
+        throw new Error(`Failed to insert guests: ${insertError.message}`);
+      }
+    }
+  },
+
+  /**
+   * Add manual guests to an occasion (creates a staff-added booking)
+   */
+  async addManualGuestsToOccasion(occasionId: string, guestCount: number) {
+    // First, get the occasion details to check capacity
+    const { data: occasion, error: occasionError } = await supabase
+      .from('bookings')
+      .select('booking_date, venue, capacity')
+      .eq('id', occasionId)
+      .single();
+
+    if (occasionError || !occasion) {
+      throw new Error(`Failed to fetch occasion details: ${occasionError?.message || 'Occasion not found'}`);
+    }
+
+    // Get current guest count
+    const { data: childBookings } = await supabase
+      .from('bookings')
+      .select('ticket_quantity')
+      .eq('parent_booking_id', occasionId)
+      .neq('status', 'cancelled');
+
+    const currentGuestCount = childBookings?.reduce((sum, b) => sum + (b.ticket_quantity || 0), 0) || 0;
+    const remainingCapacity = (occasion.capacity || 0) - currentGuestCount;
+
+    // Check if adding these guests would exceed capacity
+    if (guestCount > remainingCapacity) {
+      throw new Error(`Cannot add ${guestCount} guests. Only ${remainingCapacity} spots remaining (capacity: ${occasion.capacity})`);
+    }
+
+    // Generate a reference code
+    const generateReferenceCode = () => {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      return `TIX-${code}`;
+    };
+
+    // Create a manual booking for these guests
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .insert({
+        parent_booking_id: occasionId,
+        customer_name: 'Walk-in / Staff Added',
+        booking_type: 'vip_tickets',
+        booking_date: occasion.booking_date,
+        venue: occasion.venue,
+        ticket_quantity: guestCount,
+        status: 'confirmed',
+        payment_status: 'unpaid',
+        booking_source: 'staff_manual',
+        reference_code: generateReferenceCode(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create manual booking: ${error.message}`);
+    }
+
+    return booking;
+  },
+
+  /**
    * Get organiser URL for an occasion
    */
   getOrganiserUrl(occasion: Occasion): string {
     if (!occasion.organiser_token) return '';
-    const baseUrl = occasion.venue === 'manor' 
-      ? 'https://manorleederville.com' 
-      : 'https://hippie-club.com';
+    
+    // Use localhost in development, production URLs otherwise
+    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const baseUrl = isDev
+      ? window.location.origin.replace('gm-dashboard', occasion.venue === 'manor' ? 'manor-perth-nightlife-ui' : 'hippie-club-ui')
+      : occasion.venue === 'manor' 
+        ? 'https://manorleederville.com' 
+        : 'https://hippie-club.com';
     return `${baseUrl}/occasion/${occasion.organiser_token}`;
   },
 
@@ -323,9 +423,14 @@ export const occasionService = {
    */
   getShareUrl(occasion: Occasion): string {
     if (!occasion.share_token) return '';
-    const baseUrl = occasion.venue === 'manor' 
-      ? 'https://manorleederville.com' 
-      : 'https://hippie-club.com';
+    
+    // Use localhost in development, production URLs otherwise
+    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const baseUrl = isDev
+      ? window.location.origin.replace('gm-dashboard', occasion.venue === 'manor' ? 'manor-perth-nightlife-ui' : 'hippie-club-ui')
+      : occasion.venue === 'manor' 
+        ? 'https://manorleederville.com' 
+        : 'https://hippie-club.com';
     return `${baseUrl}/occasion/buy/${occasion.share_token}`;
   },
 };

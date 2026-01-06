@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -23,30 +23,10 @@ import Auth from "./pages/Auth";
 import Revenue from "./pages/Revenue";
 import BoothManagement from "./pages/BoothManagement";
 import ProfitAndLoss from "./pages/ProfitAndLoss";
-import Team from "./pages/Team";
 import Occasions from "./pages/Occasions";
-import { useAuth } from "@/contexts/AuthContext";
-import { isAdmin } from "@/lib/permissions";
+import Team from "./pages/Team";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes - data considered fresh
-      gcTime: 1000 * 60 * 30,   // 30 minutes - keep in cache
-      refetchOnWindowFocus: false, // Don't refetch when user returns to tab
-    },
-  },
-});
-
-const RootRoute = () => {
-  const { role } = useAuth();
-
-  if (isAdmin(role)) {
-    return <Dashboard />;
-  }
-
-  return <Navigate to="/calendar" replace />;
-};
+const queryClient = new QueryClient();
 
 const App = () => (
   <ThemeProvider>
@@ -60,14 +40,12 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={
                 <ProtectedRoute>
-                  <RootRoute />
+                  <Dashboard />
                 </ProtectedRoute>
               } />
               <Route path="/dashboard" element={
                 <ProtectedRoute>
-                  <AdminRoute>
-                    <Dashboard />
-                  </AdminRoute>
+                  <Dashboard />
                 </ProtectedRoute>
               } />
               <Route path="/calendar" element={
@@ -95,33 +73,19 @@ const App = () => (
                   <Customers />
                 </ProtectedRoute>
               } />
-              <Route path="/occasions" element={
-                <ProtectedRoute>
-                  <Occasions />
-                </ProtectedRoute>
-              } />
               <Route path="/revenue" element={
-                <ProtectedRoute>
-                  <AdminRoute>
-                    <Revenue />
-                  </AdminRoute>
-                </ProtectedRoute>
+                <AdminRoute>
+                  <Revenue />
+                </AdminRoute>
               } />
               <Route path="/pnl" element={
-                <ProtectedRoute>
-                  <AdminRoute>
-                    <ProfitAndLoss />
-                  </AdminRoute>
-                </ProtectedRoute>
+                <AdminRoute>
+                  <ProfitAndLoss />
+                </AdminRoute>
               } />
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <Settings />
-                </ProtectedRoute>
-              } />
-              <Route path="/team" element={
-                <ProtectedRoute>
-                  <Team />
                 </ProtectedRoute>
               } />
               <Route path="/design" element={
@@ -133,6 +97,16 @@ const App = () => (
                 <ProtectedRoute>
                   <BoothManagement />
                 </ProtectedRoute>
+              } />
+              <Route path="/occasions" element={
+                <ProtectedRoute>
+                  <Occasions />
+                </ProtectedRoute>
+              } />
+              <Route path="/team" element={
+                <AdminRoute>
+                  <Team />
+                </AdminRoute>
               } />
               <Route path="*" element={<NotFound />} />
             </Routes>

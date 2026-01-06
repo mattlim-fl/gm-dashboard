@@ -8,10 +8,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Home, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, Calendar, PartyPopper } from "lucide-react";
+import { Home, Calendar, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, PartyPopper, Users2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { LastSyncIndicator } from "./LastSyncIndicator";
@@ -19,9 +18,21 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { isAdmin } from "@/lib/permissions";
+import { canViewFinancial, canManageTeam } from "@/lib/permissions";
 
-const financeItems = [
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const dashboardItem: MenuItem = {
+  title: "Dashboard",
+  url: "/dashboard",
+  icon: Home,
+};
+
+const financeItems: MenuItem[] = [
   {
     title: "Revenue",
     url: "/revenue",
@@ -34,7 +45,7 @@ const financeItems = [
   },
 ];
 
-const operationsItems = [
+const operationsItems: MenuItem[] = [
   {
     title: "Calendar",
     url: "/calendar",
@@ -62,10 +73,27 @@ const operationsItems = [
   },
 ];
 
+const settingsItems: MenuItem[] = [
+  {
+    title: "Booth Management",
+    url: "/booth-management",
+    icon: Building,
+  },
+  {
+    title: "Settings", 
+    url: "/settings",
+    icon: Settings,
+  },
+  {
+    title: "Team",
+    url: "/team",
+    icon: Users2,
+  },
+];
+
 export function AppSidebar() {
-  const [lastSyncTime, setLastSyncTime] = useState<string | undefined>();
   const { role } = useAuth();
-  const isAdminUser = isAdmin(role);
+  const [lastSyncTime, setLastSyncTime] = useState<string | undefined>();
 
   const fetchLastSyncTime = async () => {
     try {
@@ -80,8 +108,8 @@ export function AppSidebar() {
       if (!error && data?.last_successful_sync_at) {
         setLastSyncTime(data.last_successful_sync_at);
       }
-    } catch (_error) {
-      // Silent fail for last sync time fetch
+    } catch (error) {
+      console.error('Error fetching last sync time:', error);
     }
   };
 
@@ -91,44 +119,46 @@ export function AppSidebar() {
 
 
 
+  const renderMenuItems = (items: MenuItem[]) => (
+    <SidebarMenu>
+      {items.map((item) => (
+        <SidebarMenuItem key={item.title}>
+          <SidebarMenuButton asChild tooltip={item.title}>
+            <Link to={item.url}>
+              <item.icon className="h-4 w-4" />
+              <span>{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
+  );
+
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        {/* Dashboard - standalone (admins only) */}
-        {isAdminUser && (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Dashboard">
-                    <Link to="/dashboard">
-                      <Home className="h-4 w-4" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        {/* Dashboard - Standalone */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip={dashboardItem.title}>
+                  <Link to={dashboardItem.url}>
+                    <dashboardItem.icon className="h-4 w-4" />
+                    <span>{dashboardItem.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        {/* Finance Section (admins only) */}
-        {isAdminUser && (
+        {/* Finance Section - Only show if admin */}
+        {canViewFinancial(role) && (
           <SidebarGroup>
             <SidebarGroupLabel>Finance</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                {financeItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild tooltip={item.title}>
-                      <Link to={item.url}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
+              {renderMenuItems(financeItems)}
             </SidebarGroupContent>
           </SidebarGroup>
         )}
@@ -137,18 +167,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Operations</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {operationsItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <Link to={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {renderMenuItems(operationsItems)}
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -156,44 +175,18 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Settings</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Booth Management">
-                  <Link to="/booth-management">
-                    <Building className="h-4 w-4" />
-                    <span>Booth Management</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Settings">
-                  <Link to="/settings">
-                    <Settings className="h-4 w-4" />
-                    <span>Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Team">
-                  <Link to="/team">
-                    <Users className="h-4 w-4" />
-                    <span>Team</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            {renderMenuItems(
+              settingsItems.filter(item => 
+                item.url !== '/team' || canManageTeam(role)
+              )
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
         <div className="space-y-2">
           <ThemeToggle />
-          {isAdminUser && (
-            <LastSyncIndicator
-              lastSyncTime={lastSyncTime}
-              onSyncComplete={fetchLastSyncTime}
-            />
-          )}
+          <LastSyncIndicator lastSyncTime={lastSyncTime} onSyncComplete={fetchLastSyncTime} />
         </div>
       </SidebarFooter>
     </Sidebar>

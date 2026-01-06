@@ -11,19 +11,20 @@ import { Progress } from "@/components/ui/progress";
 import { useBookings } from "@/hooks/useBookings";
 import { updateVipTicketCheckins, BookingRow } from "@/services/bookingService";
 import { formatDateToISO } from "@/utils/dateUtils";
-import { CheckCheck, Search, Users, Mic2, Calendar, ArrowLeft, UserPlus, Star, Pencil } from "lucide-react";
+import { CheckCheck, Search, Users, Mic2, Calendar, ArrowLeft, UserPlus, Star, Pencil, Check, X } from "lucide-react";
 import { QuickAddBookingDialog } from "@/components/bookings/QuickAddBookingDialog";
 import { BookingDetailsSidebar } from "@/components/bookings/BookingDetailsSidebar";
 import { customerService, CustomerRow } from "@/services/customerService";
 import { AddMemberDialog } from "@/components/members/AddMemberDialog";
 import { MemberProfileDialog } from "@/components/members/MemberProfileDialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 type VenueFilter = 'all' | 'manor' | 'hippie';
 
 interface AttendanceState {
   vip: Record<string, boolean[]>;
-  karaoke: Record<string, boolean[]>; // Changed to arrays to track individual guests
+  karaoke: Record<string, boolean>;
 }
 
 const getStorageKey = (dateISO: string) => `runSheetAttendance:${dateISO}`;
@@ -37,31 +38,21 @@ export default function RunSheet() {
   const [showCheckedOff, setShowCheckedOff] = useState<boolean>(false);
   const [members, setMembers] = useState<CustomerRow[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
-  
-  // Guest lists for all bookings (both VIP and karaoke)
-  // Now stores structured guest data with is_organiser flag
-  interface GuestEntry {
-    id: string;
-    guest_name: string;
-    is_organiser: boolean;
-  }
-  const [guestLists, setGuestLists] = useState<Record<string, GuestEntry[]>>({});
-  const [loadingGuestLists, setLoadingGuestLists] = useState(false);
-  
-  // Booth names lookup
-  const [boothNames, setBoothNames] = useState<Record<string, string>>({});
 
   // Editing
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [isEditSidebarOpen, setIsEditSidebarOpen] = useState(false);
   
+  // Inline guest name editing
+  const [editingGuestId, setEditingGuestId] = useState<string | null>(null);
+  const [editingGuestName, setEditingGuestName] = useState<string>("");
+  const [savingGuestName, setSavingGuestName] = useState(false);
+  
   // Member management
   const [selectedMember, setSelectedMember] = useState<CustomerRow | null>(null);
   const [isMemberProfileOpen, setIsMemberProfileOpen] = useState(false);
-
-  // Guest name editing
-  const [editingGuestId, setEditingGuestId] = useState<string | null>(null);
-  const [editingGuestName, setEditingGuestName] = useState<string>("");
+  
+  const queryClient = useQueryClient();
 
   // Load/save attendance
   useEffect(() => {
@@ -76,24 +67,7 @@ export default function RunSheet() {
             else if (typeof value === 'number') migratedVip[bookingId] = Array(Math.max(0, value)).fill(true);
           });
         }
-        
-        // Migrate karaoke from old boolean format to array format
-        const migratedKaraoke: Record<string, boolean[]> = {};
-        if (parsed.karaoke) {
-          Object.entries(parsed.karaoke).forEach(([bookingId, value]) => {
-            if (Array.isArray(value)) {
-              migratedKaraoke[bookingId] = value as boolean[];
-            } else if (typeof value === 'boolean' && value) {
-              // Old format: single boolean true means all checked
-              // We'll initialize with empty array, will be populated when guest list loads
-              migratedKaraoke[bookingId] = [];
-            } else {
-              migratedKaraoke[bookingId] = [];
-            }
-          });
-        }
-        
-        setAttendance({ vip: migratedVip, karaoke: migratedKaraoke });
+        setAttendance({ vip: migratedVip, karaoke: parsed.karaoke || {} });
       } else {
         setAttendance({ vip: {}, karaoke: {} });
       }
@@ -113,8 +87,8 @@ export default function RunSheet() {
       try {
         const membersData = await customerService.getMembers(search);
         setMembers(membersData);
-      } catch (_error) {
-        // Silent fail for member fetch
+      } catch (error) {
+        console.error('Error fetching members:', error);
       } finally {
         setLoadingMembers(false);
       }
@@ -141,109 +115,11 @@ export default function RunSheet() {
     search: search || undefined,
   }), [venue, selectedDate, search]);
 
-  const occasionFilters = useMemo(() => ({
-    bookingType: 'occasion',
-    venue: venue === 'all' ? undefined : venue,
-    dateFrom: selectedDate,
-    dateTo: selectedDate,
-    search: search || undefined,
-  }), [venue, selectedDate, search]);
-
   const { data: vipBookings = [], isLoading: loadingVip } = useBookings(guestFilters as any);
   const { data: karaokeBookings = [], isLoading: loadingKaraoke } = useBookings(karaokeFilters as any);
-  const { data: occasionBookings = [], isLoading: loadingOccasions } = useBookings(occasionFilters as any);
 
-  // Fetch guest lists for all bookings (VIP, karaoke, and occasions)
-  // booking_guests is now the source of truth for who needs entry
-  useEffect(() => {
-    const fetchGuestLists = async () => {
-      const allBookings = [...vipBookings, ...karaokeBookings, ...occasionBookings];
-      if (allBookings.length === 0) {
-        setGuestLists({});
-        return;
-      }
-
-      setLoadingGuestLists(true);
-      try {
-        const bookingIds = allBookings.map(b => b.id);
-        const { data: guestRows, error } = await supabase
-          .from("booking_guests")
-          .select("id, booking_id, guest_name, is_organiser")
-          .in("booking_id", bookingIds)
-          .order("is_organiser", { ascending: false })
-          .order("created_at");
-
-        if (error) throw error;
-
-        // Group guests by booking_id
-        const lists: Record<string, GuestEntry[]> = {};
-        bookingIds.forEach(id => {
-          lists[id] = [];
-        });
-
-        if (guestRows) {
-          guestRows.forEach((row) => {
-            if (row.booking_id) {
-              if (!lists[row.booking_id]) {
-                lists[row.booking_id] = [];
-              }
-              lists[row.booking_id].push({
-                id: row.id,
-                guest_name: row.guest_name || '',
-                is_organiser: row.is_organiser || false,
-              });
-            }
-          });
-        }
-
-        setGuestLists(lists);
-      } catch (_error) {
-        // Silent fail for guest lists fetch
-      } finally {
-        setLoadingGuestLists(false);
-      }
-    };
-
-    fetchGuestLists();
-  }, [vipBookings, karaokeBookings, occasionBookings]);
-
-  // Fetch booth names for karaoke bookings
-  useEffect(() => {
-    const fetchBoothNames = async () => {
-      const boothIds = karaokeBookings
-        .map(b => b.karaoke_booth_id)
-        .filter((id): id is string => !!id);
-      
-      if (boothIds.length === 0) return;
-
-      const uniqueIds = [...new Set(boothIds)];
-      const { data: booths, error } = await supabase
-        .from("karaoke_booths")
-        .select("id, name")
-        .in("id", uniqueIds);
-
-      if (error) {
-        return;
-      }
-
-      const namesMap: Record<string, string> = {};
-      booths?.forEach(booth => {
-        namesMap[booth.id] = booth.name;
-      });
-      setBoothNames(namesMap);
-    };
-
-    fetchBoothNames();
-  }, [karaokeBookings]);
-
-  // Stats - combine VIP tickets, karaoke guests, and occasion guests
-  // Use booking_guests as source of truth
-  const totalVipTickets = useMemo(() => {
-    return vipBookings.reduce((sum, b) => {
-      const guests = guestLists[b.id] || [];
-      return sum + guests.length;
-    }, 0);
-  }, [vipBookings, guestLists]);
+  // Stats
+  const totalVipTickets = useMemo(() => vipBookings.reduce((sum, b) => sum + (b.ticket_quantity || 0), 0), [vipBookings]);
   const checkedVipTickets = useMemo(() => {
     return vipBookings.reduce((sum, b) => {
       const local = attendance.vip[b.id];
@@ -252,135 +128,11 @@ export default function RunSheet() {
       return sum + stored.filter(Boolean).length;
     }, 0);
   }, [vipBookings, attendance.vip]);
-
-  // Calculate karaoke stats based on booking_guests entries (source of truth)
-  const totalKaraokeGuests = useMemo(() => {
-    return karaokeBookings.reduce((sum, b) => {
-      const guests = guestLists[b.id] || [];
-      return sum + guests.length;
-    }, 0);
-  }, [karaokeBookings, guestLists]);
-
-  const checkedKaraokeGuests = useMemo(() => {
-    return karaokeBookings.reduce((sum, b) => {
-      const checkins = attendance.karaoke[b.id] || [];
-      return sum + checkins.filter(Boolean).length;
-    }, 0);
-  }, [karaokeBookings, attendance.karaoke]);
-
-  // Calculate occasion stats based on booking_guests entries (source of truth)
-  const totalOccasionGuests = useMemo(() => {
-    return occasionBookings.reduce((sum, b) => {
-      const guests = guestLists[b.id] || [];
-      return sum + guests.length;
-    }, 0);
-  }, [occasionBookings, guestLists]);
-
-  const checkedOccasionGuests = useMemo(() => {
-    return occasionBookings.reduce((sum, b) => {
-      const checkins = attendance.karaoke[b.id] || []; // Use karaoke attendance for occasions
-      if (Array.isArray(checkins)) return sum + checkins.filter(Boolean).length;
-      return sum;
-    }, 0);
-  }, [occasionBookings, attendance.karaoke]);
-
-  // Calculate karaoke booking stats (for Karaoke tab - counts bookings, not guests)
-  const checkedKaraokeBookings = useMemo(() => {
-    return karaokeBookings.filter(b => {
-      const checkins = attendance.karaoke[b.id] || [];
-      return checkins[0] === true; // First element indicates booking-level check-in
-    }).length;
-  }, [karaokeBookings, attendance.karaoke]);
-
-  // Combined stats for Guests tab
-  const totalGuests = totalVipTickets + totalKaraokeGuests + totalOccasionGuests;
-  const checkedGuests = checkedVipTickets + checkedKaraokeGuests + checkedOccasionGuests;
-  const guestsPercent = totalGuests > 0 ? Math.round((checkedGuests / totalGuests) * 100) : 0;
-  
   const vipPercent = totalVipTickets > 0 ? Math.round((checkedVipTickets / totalVipTickets) * 100) : 0;
-  const karaokeBookingsPercent = karaokeBookings.length > 0 ? Math.round((checkedKaraokeBookings / karaokeBookings.length) * 100) : 0;
 
-  // Flatten all guests into a simple list for table display
-  // booking_guests is the source of truth - one row per entry
-  const allGuestRows = useMemo(() => {
-    const rows: Array<{
-      id: string; // unique row id (booking_guests.id)
-      guestEntryId: string; // the actual booking_guests.id
-      guestName: string;
-      isOrganiser: boolean;
-      reference: string;
-      bookingId: string;
-      guestIndex: number;
-      isVip: boolean;
-      booking: BookingRow;
-    }> = [];
-
-    // Add VIP ticket guests from booking_guests
-    vipBookings.forEach(booking => {
-      const guests = guestLists[booking.id] || [];
-      guests.forEach((guest, i) => {
-        rows.push({
-          id: `${booking.id}-${i}`,
-          guestEntryId: guest.id,
-          guestName: guest.guest_name || `Guest #${i + 1}`,
-          isOrganiser: guest.is_organiser,
-          reference: booking.reference_code || 'NO-REF',
-          bookingId: booking.id,
-          guestIndex: i,
-          isVip: true,
-          booking,
-        });
-      });
-    });
-
-    // Add karaoke guests from booking_guests
-    karaokeBookings.forEach(booking => {
-      const guests = guestLists[booking.id] || [];
-      guests.forEach((guest, i) => {
-        rows.push({
-          id: `${booking.id}-${i}`,
-          guestEntryId: guest.id,
-          guestName: guest.guest_name || `Guest #${i + 1}`,
-          isOrganiser: guest.is_organiser,
-          reference: booking.reference_code || 'NO-REF',
-          bookingId: booking.id,
-          guestIndex: i,
-          isVip: false,
-          booking,
-        });
-      });
-    });
-
-    // Add occasion guests from booking_guests
-    occasionBookings.forEach(booking => {
-      const guests = guestLists[booking.id] || [];
-      guests.forEach((guest, i) => {
-        rows.push({
-          id: `${booking.id}-${i}`,
-          guestEntryId: guest.id,
-          guestName: guest.guest_name || `Guest #${i + 1}`,
-          isOrganiser: guest.is_organiser,
-          reference: booking.reference_code || 'NO-REF',
-          bookingId: booking.id,
-          guestIndex: i,
-          isVip: false, // Use same check-in system as karaoke
-          booking,
-        });
-      });
-    });
-
-    // Sort: organisers first within each reference, then by name
-    return rows.sort((a, b) => {
-      // First sort by reference
-      const refCompare = a.reference.localeCompare(b.reference);
-      if (refCompare !== 0) return refCompare;
-      // Then organisers first
-      if (a.isOrganiser && !b.isOrganiser) return -1;
-      if (!a.isOrganiser && b.isOrganiser) return 1;
-      // Then by name
-      return a.guestName.localeCompare(b.guestName);
-    });
-  }, [vipBookings, karaokeBookings, occasionBookings, guestLists]);
+  const totalKaraoke = karaokeBookings.length;
+  const checkedKaraoke = useMemo(() => karaokeBookings.reduce((sum, b) => sum + (attendance.karaoke[b.id] ? 1 : 0), 0), [karaokeBookings, attendance.karaoke]);
+  const karaokePercent = totalKaraoke > 0 ? Math.round((checkedKaraoke / totalKaraoke) * 100) : 0;
 
   const isToday = selectedDate === formatDateToISO(new Date());
 
@@ -390,8 +142,8 @@ export default function RunSheet() {
     const checkins = nextState.map(c => (c ? new Date().toISOString() : null));
     try {
       await updateVipTicketCheckins(bookingId, checkins);
-    } catch (_e) {
-      // Silent fail for checkins update
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -408,28 +160,8 @@ export default function RunSheet() {
     await updateCheckins(bookingId, nextState);
   };
 
-  // Karaoke guest handlers
-  const handleKaraokeGuestToggle = (bookingId: string, index: number, maxGuests: number) => {
-    const current = attendance.karaoke[bookingId] ? [...attendance.karaoke[bookingId]] : Array(maxGuests).fill(false);
-    current[index] = !current[index];
-    setAttendance(prev => ({ ...prev, karaoke: { ...prev.karaoke, [bookingId]: current } }));
-  };
-
-  const handleKaraokeCheckAll = (bookingId: string, maxGuests: number) => {
-    const current = attendance.karaoke[bookingId] || Array(maxGuests).fill(false);
-    const allChecked = current.every(Boolean);
-    const nextState = Array(maxGuests).fill(!allChecked);
-    setAttendance(prev => ({ ...prev, karaoke: { ...prev.karaoke, [bookingId]: nextState } }));
-  };
-
-  // Karaoke booking-level check-in toggle (for Karaoke tab)
-  const handleKaraokeBookingToggle = (bookingId: string) => {
-    const current = attendance.karaoke[bookingId] || [];
-    const isChecked = current[0] === true;
-    // Set first element to toggle booking check-in status
-    const nextState = [...current];
-    nextState[0] = !isChecked;
-    setAttendance(prev => ({ ...prev, karaoke: { ...prev.karaoke, [bookingId]: nextState } }));
+  const handleKaraokeToggle = (bookingId: string, checked: boolean) => {
+    setAttendance(prev => ({ ...prev, karaoke: { ...prev.karaoke, [bookingId]: checked } }));
   };
 
   const handleBookingClick = (booking: BookingRow) => {
@@ -441,75 +173,104 @@ export default function RunSheet() {
     setSelectedDate(formatDateToISO(new Date()));
   };
 
-  // Guest name editing handlers
-  const handleStartEditGuestName = (rowId: string, currentName: string) => {
-    setEditingGuestId(rowId);
+  const handleStartEditGuest = (guestId: string, currentName: string) => {
+    setEditingGuestId(guestId);
     setEditingGuestName(currentName);
   };
 
-  const handleSaveGuestName = async (bookingId: string, guestIndex: number, newName: string) => {
-    if (!newName.trim()) {
-      setEditingGuestId(null);
-      setEditingGuestName("");
-      return;
-    }
-
-    try {
-      // Get the guest entry from our local state
-      const guests = guestLists[bookingId] || [];
-      const guestEntry = guests[guestIndex];
-
-      if (guestEntry?.id) {
-        // Update existing guest by ID
-        const { error: updateError } = await supabase
-          .from("booking_guests")
-          .update({ guest_name: newName.trim() })
-          .eq("id", guestEntry.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // Insert new guest (shouldn't happen with new model, but fallback)
-        const { error: insertError } = await supabase
-          .from("booking_guests")
-          .insert({
-            booking_id: bookingId,
-            guest_name: newName.trim(),
-            is_organiser: false
-          });
-
-        if (insertError) throw insertError;
-      }
-
-      // Refresh guest lists for this booking
-      const { data: guestRows, error } = await supabase
-        .from("booking_guests")
-        .select("id, booking_id, guest_name, is_organiser")
-        .eq("booking_id", bookingId)
-        .order("is_organiser", { ascending: false })
-        .order("created_at");
-
-      if (!error && guestRows) {
-        setGuestLists(prev => ({
-          ...prev,
-          [bookingId]: guestRows.map((row) => ({
-            id: row.id,
-            guest_name: row.guest_name || '',
-            is_organiser: row.is_organiser || false,
-          }))
-        }));
-      }
-
-    } catch (_error) {
-      // Silent fail for guest name save
-    }
-
+  const handleCancelEditGuest = () => {
     setEditingGuestId(null);
     setEditingGuestName("");
   };
 
-  const handleCancelEditGuestName = () => {
-    setEditingGuestId(null);
-    setEditingGuestName("");
+  const handleSaveGuestName = async (bookingId: string, ticketIndex: number, rowId: string, guestId: string | null) => {
+    if (savingGuestName) return;
+    
+    setSavingGuestName(true);
+    try {
+      const trimmedName = editingGuestName.trim();
+      
+      if (trimmedName === '') {
+        // If name is empty and guest exists, delete it
+        if (guestId) {
+          const { error: deleteError } = await supabase
+            .from('booking_guests')
+            .delete()
+            .eq('id', guestId);
+          
+          if (deleteError) throw deleteError;
+        }
+        // If no guest ID, nothing to delete
+      } else {
+        // Update or insert the guest name
+        if (guestId) {
+          // Update existing guest
+          const { error: updateError } = await supabase
+            .from('booking_guests')
+            .update({ guest_name: trimmedName })
+            .eq('id', guestId);
+          
+          if (updateError) throw updateError;
+        } else {
+          // Get all current guests to maintain order
+          const { data: currentGuests, error: fetchError } = await supabase
+            .from('booking_guests')
+            .select('id, guest_name, is_organiser')
+            .eq('booking_id', bookingId)
+            .order('created_at');
+
+          if (fetchError) throw fetchError;
+
+          const guests = currentGuests || [];
+          const guestNames = guests.map(g => g.guest_name);
+          
+          // Ensure array is long enough, fill with empty strings if needed
+          while (guestNames.length <= ticketIndex) {
+            guestNames.push('');
+          }
+          
+          // Update the name at the target index
+          guestNames[ticketIndex] = trimmedName;
+          
+          // Delete all existing guests for this booking
+          const { error: deleteError } = await supabase
+            .from('booking_guests')
+            .delete()
+            .eq('booking_id', bookingId);
+          
+          if (deleteError) throw deleteError;
+          
+          // Re-insert all guests (only non-empty ones, preserving organiser flags)
+          const toInsert = guestNames.map((name, idx) => {
+            const existingGuest = guests[idx];
+            return {
+              booking_id: bookingId,
+              guest_name: name.trim(),
+              is_organiser: existingGuest?.is_organiser || false,
+            };
+          }).filter(g => g.guest_name.length > 0); // Only insert non-empty names
+          
+          if (toInsert.length > 0) {
+            const { error: insertError } = await supabase
+              .from('booking_guests')
+              .insert(toInsert);
+            
+            if (insertError) throw insertError;
+          }
+        }
+      }
+
+      // Refresh the bookings data
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      
+      setEditingGuestId(null);
+      setEditingGuestName("");
+    } catch (error) {
+      console.error('Error saving guest name:', error);
+      alert('Failed to save guest name. Please try again.');
+    } finally {
+      setSavingGuestName(false);
+    }
   };
 
   return (
@@ -544,9 +305,9 @@ export default function RunSheet() {
               <CardContent className="p-3">
                 <div className="flex justify-between text-sm mb-2 text-muted-foreground">
                   <span className="flex items-center gap-1.5 font-medium"><Users className="h-3.5 w-3.5" /> Guests</span>
-                  <span className="font-mono">{checkedGuests}/{totalGuests}</span>
+                  <span className="font-mono">{checkedVipTickets}/{totalVipTickets}</span>
                 </div>
-                <Progress value={guestsPercent} className="h-2" />
+                <Progress value={vipPercent} className="h-2" indicatorClassName="bg-emerald-500" />
               </CardContent>
             </Card>
             <Card className="bg-card/50 border shadow-sm">
@@ -554,10 +315,10 @@ export default function RunSheet() {
                 <div className="flex justify-between text-sm mb-2 text-muted-foreground">
                   <span className="flex items-center gap-1.5 font-medium"><Mic2 className="h-3.5 w-3.5" /> Karaoke</span>
                   <span className="font-mono">
-                    {checkedKaraokeBookings}/{karaokeBookings.length}
+                    {Number.isFinite(checkedKaraoke) ? checkedKaraoke : 0}/{Number.isFinite(totalKaraoke) ? totalKaraoke : 0}
                   </span>
                 </div>
-                <Progress value={karaokeBookingsPercent} className="h-2" />
+                <Progress value={Number.isFinite(karaokePercent) ? karaokePercent : 0} className="h-2" indicatorClassName="bg-blue-500" />
               </CardContent>
             </Card>
           </div>
@@ -605,7 +366,7 @@ export default function RunSheet() {
 
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
             <TabsList className="grid w-full grid-cols-3 h-10">
-              <TabsTrigger value="guests">Guests ({totalGuests})</TabsTrigger>
+              <TabsTrigger value="guests">Guests ({vipBookings.length})</TabsTrigger>
               <TabsTrigger value="karaoke">Karaoke ({karaokeBookings.length})</TabsTrigger>
               <TabsTrigger value="members" className="gap-1.5">
                  <Star className="h-3.5 w-3.5" /> Members
@@ -615,207 +376,263 @@ export default function RunSheet() {
           
           <div className="flex justify-between items-center px-1">
              <div className="text-xs text-muted-foreground font-medium">
-               {activeTab === 'guests' && `${checkedGuests} of ${totalGuests} checked in`}
-               {activeTab === 'karaoke' && `${checkedKaraokeBookings} of ${karaokeBookings.length} checked in`}
+               {activeTab === 'guests' && `${checkedVipTickets} checked in`}
+               {activeTab === 'karaoke' && `${checkedKaraoke} checked in`}
                {activeTab === 'members' && `${members.length} found`}
              </div>
-            {(activeTab === 'guests' || activeTab === 'karaoke') && (
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="showChecked" 
-                  checked={showCheckedOff} 
-                  onCheckedChange={(c) => setShowCheckedOff(!!c)} 
-                />
-                <label htmlFor="showChecked" className="text-sm text-muted-foreground cursor-pointer select-none">
-                  Show checked
-                </label>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Checkbox 
+                id="showChecked" 
+                checked={showCheckedOff} 
+                onCheckedChange={(c) => setShowCheckedOff(!!c)} 
+              />
+              <label htmlFor="showChecked" className="text-sm text-muted-foreground cursor-pointer select-none">
+                Show checked
+              </label>
+            </div>
           </div>
         </div>
 
         {/* Main Content List */}
         <div className="space-y-4 min-h-[50vh]">
           {activeTab === 'guests' && (
-            <Card className="overflow-hidden">
-              {allGuestRows.length === 0 && !loadingVip && !loadingKaraoke && !loadingOccasions ? (
-                <div className="text-center py-10 text-muted-foreground">No guests found for this date.</div>
-              ) : (
-                <div className="divide-y">
-                  {/* Table Header */}
-                  <div className="grid grid-cols-[1fr,auto,auto] gap-2 px-4 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
-                    <div>Name</div>
-                    <div className="w-24 text-center">Reference</div>
-                    <div className="w-12"></div>
-                  </div>
+            <div className="space-y-0">
+              {/* Flatten all guests into individual rows */}
+              {(() => {
+                if (loadingVip) return null;
+                // Build flat list of all guests
+                const flatGuests: Array<{
+                  id: string;
+                  guestId: string | null; // ID from booking_guests table, null if doesn't exist yet
+                  guestName: string;
+                  bookingId: string;
+                  ticketIndex: number;
+                  referenceCode: string;
+                  isChecked: boolean;
+                  isOrganiser: boolean;
+                  organiserName: string | null; // Name of the occasion organiser
+                  booking: BookingRow;
+                }> = [];
+
+                // Build a map of booking IDs to organiser names for occasion bookings
+                const organiserMap = new Map<string, string>();
+                vipBookings.forEach((booking) => {
+                  const parentBookingId = (booking as any).parent_booking_id;
+                  const isOccasionOrganiser = (booking as any).is_occasion_organiser === true;
                   
-                  {/* Table Rows */}
-                  {allGuestRows.map((row) => {
-                    const checkins = row.isVip 
-                      ? (attendance.vip[row.bookingId] || [])
-                      : (attendance.karaoke[row.bookingId] || []);
-                    const isChecked = !!checkins[row.guestIndex];
+                  if (isOccasionOrganiser) {
+                    // This booking is the organiser, use its customer_name
+                    organiserMap.set(booking.id, booking.customer_name || '');
+                  } else if (parentBookingId) {
+                    // Find the parent booking to get organiser name
+                    const parentBooking = vipBookings.find(b => b.id === parentBookingId);
+                    if (parentBooking) {
+                      organiserMap.set(booking.id, parentBooking.customer_name || '');
+                    }
+                  }
+                });
 
-                    if (!showCheckedOff && isChecked) return null;
+                vipBookings.forEach((booking) => {
+                  const max = booking.ticket_quantity || 0;
+                  const checkins = attendance.vip[booking.id] || [];
+                  
+                  // Extract guest names, IDs, and organiser flags from booking_guests relationship
+                  const bookingGuests = (booking as any).booking_guests || [];
+                  const guestData = Array.isArray(bookingGuests) 
+                    ? bookingGuests.map((g: any) => ({
+                        id: g?.id || null,
+                        name: g?.guest_name || '',
+                        isOrganiser: g?.is_organiser === true
+                      }))
+                    : [];
 
-                    const guestsInBooking = guestLists[row.bookingId]?.length || 1;
+                  // Get organiser name for this booking
+                  const organiserName = organiserMap.get(booking.id) || null;
 
-                    const handleToggle = row.isVip
-                      ? () => handleVipToggle(row.bookingId, row.guestIndex, guestsInBooking)
-                      : () => handleKaraokeGuestToggle(row.bookingId, row.guestIndex, guestsInBooking);
+                  // Add each ticket as a row
+                  for (let idx = 0; idx < max; idx++) {
+                    const isChecked = !!checkins[idx];
+                    
+                    // Skip individual checked guests if showCheckedOff is false
+                    if (!showCheckedOff && isChecked) continue;
+                    
+                    const guestInfo = guestData[idx] || { id: null, name: '', isOrganiser: false };
+                    const guestName = guestInfo.name || `Ticket #${idx + 1}`;
 
-                    const isEditing = editingGuestId === row.id;
+                    flatGuests.push({
+                      id: `${booking.id}-${idx}`, // Unique row ID
+                      guestId: guestInfo.id, // booking_guests table ID (null if not yet created)
+                      guestName,
+                      bookingId: booking.id,
+                      ticketIndex: idx,
+                      referenceCode: booking.reference_code || 'NO-REF',
+                      isChecked,
+                      isOrganiser: guestInfo.isOrganiser,
+                      organiserName,
+                      booking,
+                    });
+                  }
+                });
 
-                    return (
-                      <div
-                        key={row.id}
-                        className={`grid grid-cols-[1fr,auto,auto] gap-2 px-4 py-3 items-center transition-colors ${isChecked ? 'bg-muted/30 opacity-60' : ''}`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {isEditing ? (
-                            <Input
-                              value={editingGuestName}
-                              onChange={(e) => setEditingGuestName(e.target.value)}
-                              onBlur={() => handleSaveGuestName(row.bookingId, row.guestIndex, editingGuestName)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveGuestName(row.bookingId, row.guestIndex, editingGuestName);
-                                } else if (e.key === 'Escape') {
-                                  handleCancelEditGuestName();
-                                }
-                              }}
-                              autoFocus
-                              className="h-8 text-sm flex-1"
-                            />
-                          ) : (
-                            <>
-                              <span 
-                                className={`text-sm font-medium truncate cursor-pointer hover:underline ${isChecked ? 'line-through text-muted-foreground' : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleBookingClick(row.booking);
-                                }}
-                              >
-                                {row.guestName}
-                              </span>
-                              {row.isOrganiser && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 flex-shrink-0 bg-orange-500/10 text-orange-600 border-orange-500/30">
-                                  Organiser
-                                </Badge>
-                              )}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStartEditGuestName(row.id, row.guestName);
-                                }}
-                                className="p-1.5 hover:bg-accent rounded-md transition-colors flex-shrink-0 touch-manipulation"
-                                title="Edit guest name"
-                              >
-                                <Pencil className="h-4 w-4 text-muted-foreground" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        <div className="w-24 text-center">
-                          <span className="text-xs font-mono text-muted-foreground">{row.reference}</span>
-                        </div>
-                        <div className="w-12 flex justify-center">
-                          <Checkbox
-                            checked={isChecked}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggle();
-                            }}
-                            className="h-5 w-5 cursor-pointer data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
+                if (flatGuests.length === 0) {
+                  return (
+                    <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg">
+                      No guests found for this date.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted/50 border-b">
+                        <tr>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Name</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Reference</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Organiser</th>
+                          <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground">Check-in</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {flatGuests.map((guest) => {
+                          return (
+                            <tr 
+                              key={guest.id}
+                              className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors ${
+                                guest.isChecked ? 'opacity-60 bg-muted/20' : ''
+                              }`}
+                            >
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  {editingGuestId === guest.id ? (
+                                    <>
+                                      <Input
+                                        value={editingGuestName}
+                                        onChange={(e) => setEditingGuestName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleSaveGuestName(guest.bookingId, guest.ticketIndex, guest.id, guest.guestId);
+                                          } else if (e.key === 'Escape') {
+                                            handleCancelEditGuest();
+                                          }
+                                        }}
+                                        className="h-8 text-sm flex-1"
+                                        autoFocus
+                                        disabled={savingGuestName}
+                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-muted"
+                                        onClick={() => handleSaveGuestName(guest.bookingId, guest.ticketIndex, guest.id, guest.guestId)}
+                                        disabled={savingGuestName}
+                                      >
+                                        <Check className="h-3.5 w-3.5 text-green-600" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-muted"
+                                        onClick={handleCancelEditGuest}
+                                        disabled={savingGuestName}
+                                      >
+                                        <X className="h-3.5 w-3.5 text-red-600" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-muted"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleStartEditGuest(guest.id, guest.guestName);
+                                        }}
+                                      >
+                                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                      </Button>
+                                      <span className={`text-sm font-medium ${guest.isChecked ? 'text-muted-foreground line-through' : ''}`}>
+                                        {guest.guestName}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="text-sm font-mono text-muted-foreground">{guest.referenceCode}</span>
+                              </td>
+                              <td className="py-3 px-4">
+                                {guest.isOrganiser ? (
+                                  <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-xs">
+                                    Organiser
+                                  </Badge>
+                                ) : guest.organiserName ? (
+                                  <span className="text-sm text-muted-foreground">{guest.organiserName}</span>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex justify-end">
+                                  <Checkbox 
+                                    checked={guest.isChecked} 
+                                    onCheckedChange={() => handleVipToggle(guest.bookingId, guest.ticketIndex, guest.booking.ticket_quantity || 0)}
+                                    className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           {activeTab === 'karaoke' && (
-            <Card className="overflow-hidden">
-              {karaokeBookings.length === 0 && !loadingKaraoke ? (
-                <div className="text-center py-10 text-muted-foreground">No karaoke bookings found for this date.</div>
-              ) : (
-                <div className="divide-y">
-                  {/* Table Header */}
-                  <div className="grid grid-cols-[minmax(120px,1fr),140px,140px,60px,90px,48px] gap-3 px-4 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
-                    <div>Customer</div>
-                    <div className="text-center">Time</div>
-                    <div className="text-center">Booth</div>
-                    <div className="text-center">Guests</div>
-                    <div className="text-center">Reference</div>
-                    <div></div>
-                  </div>
-                  
-                  {/* Table Rows - sorted by start time */}
-                  {[...karaokeBookings]
-                    .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''))
-                    .map((booking) => {
-                      const boothName = booking.karaoke_booth_id 
-                        ? boothNames[booking.karaoke_booth_id] || 'Loading...'
-                        : '-';
-                      const timeRange = booking.start_time && booking.end_time
-                        ? `${booking.start_time.slice(0, 5)} - ${booking.end_time.slice(0, 5)}`
-                        : booking.start_time?.slice(0, 5) || '-';
-                      const isChecked = attendance.karaoke[booking.id]?.[0] === true;
-
-                      if (!showCheckedOff && isChecked) return null;
-
-                      return (
-                        <div
-                          key={booking.id}
-                          className={`grid grid-cols-[minmax(120px,1fr),140px,140px,60px,90px,48px] gap-3 px-4 py-3 items-center transition-colors ${isChecked ? 'bg-muted/30 opacity-60' : ''}`}
-                        >
-                          <div
-                            className="min-w-0 cursor-pointer hover:opacity-80"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleBookingClick(booking);
-                            }}
-                          >
-                            <div className={`text-sm font-medium truncate ${isChecked ? 'line-through text-muted-foreground' : ''}`}>{booking.customer_name}</div>
-                            {booking.special_requests && (
-                              <div className="text-xs text-yellow-600 dark:text-yellow-500 truncate mt-0.5">
-                                {booking.special_requests}
-                              </div>
-                            )}
-                          </div>
-                          <div className={`text-center text-sm font-mono ${isChecked ? 'text-muted-foreground' : ''}`}>
-                            {timeRange}
-                          </div>
-                          <div className={`text-center text-sm ${isChecked ? 'text-muted-foreground' : ''}`}>
-                            {boothName}
-                          </div>
-                          <div className={`text-center text-sm ${isChecked ? 'text-muted-foreground' : ''}`}>
-                            {guestLists[booking.id]?.length || 0}
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {booking.reference_code || 'NO-REF'}
-                            </span>
-                          </div>
-                          <div className="flex justify-center">
-                            <Checkbox
-                              checked={isChecked}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleKaraokeBookingToggle(booking.id);
-                              }}
-                              className="h-5 w-5 cursor-pointer data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
+            <div className="grid grid-cols-1 gap-3">
+              {karaokeBookings.length === 0 && !loadingKaraoke && (
+                <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg">No karaoke bookings found.</div>
               )}
-            </Card>
+
+              {karaokeBookings.map((booking) => {
+                const isChecked = !!attendance.karaoke[booking.id];
+                if (!showCheckedOff && isChecked) return null;
+
+                return (
+                  <Card key={booking.id} className={`border-l-4 ${isChecked ? 'opacity-60 bg-muted/30 border-l-muted' : 'border-l-blue-500'}`}>
+                    <div className="p-3 flex items-center gap-4">
+                      <div 
+                        className="cursor-pointer" 
+                        onClick={() => handleKaraokeToggle(booking.id, !isChecked)}
+                      >
+                        <Checkbox checked={isChecked} className="h-6 w-6 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500" />
+                      </div>
+                      <div 
+                        className="flex-1 space-y-1 cursor-pointer"
+                        onClick={() => handleBookingClick(booking)}
+                      >
+                        <div className="flex justify-between items-start">
+                          <h3 className={`font-bold text-base ${isChecked ? 'line-through text-muted-foreground' : ''}`}>
+                            {booking.customer_name}
+                          </h3>
+                          <Badge variant="outline" className="ml-2 whitespace-nowrap">{booking.start_time?.slice(0, 5)}</Badge>
+                        </div>
+                        <div className="flex gap-3 text-xs text-muted-foreground">
+                          <span className="font-mono text-foreground/80">{booking.reference_code || 'REF'}</span>
+                          <span>{booking.guest_count} guests</span>
+                          {booking.karaoke_booth_id && <span>Booth {booking.karaoke_booth_id}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
           )}
 
           {activeTab === 'members' && (

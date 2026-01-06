@@ -56,7 +56,7 @@ export default function Occasions() {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      occasion.name.toLowerCase().includes(query) ||
+      occasion.occasion_name.toLowerCase().includes(query) ||
       occasion.organiser_name?.toLowerCase().includes(query) ||
       occasion.organiser_email?.toLowerCase().includes(query)
     );
@@ -157,42 +157,43 @@ export default function Occasions() {
                 <div className="space-y-4">
                   {/* Header */}
                   <div>
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-lg line-clamp-2">{occasion.name}</h3>
-                      <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
-                        {occasion.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2">
+                    {/* Occasion Name - Prominent */}
+                    <h3 className="font-semibold text-xl mb-3 text-gray-900 dark:text-white line-clamp-2">
+                      {occasion.occasion_name}
+                    </h3>
+                    <div className="flex items-center gap-2 mb-2">
                       <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
                         {occasion.venue === 'manor' ? 'Manor' : 'Hippie'}
+                      </Badge>
+                      <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
+                        {occasion.status}
                       </Badge>
                     </div>
                   </div>
 
                   {/* Stats */}
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                       <Calendar className="h-4 w-4" />
                       <span>{formattedDate}</span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                       <DollarSign className="h-4 w-4" />
                       <span>${ticketPrice} per ticket</span>
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between text-sm mb-2">
-                        <div className="flex items-center gap-2 text-gray-600">
+                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                           <Users className="h-4 w-4" />
                           <span>Capacity</span>
                         </div>
-                        <span className="font-medium">
+                        <span className="font-medium dark:text-white">
                           {occasion.total_guests}/{occasion.capacity}
                         </span>
                       </div>
-                      <div className="bg-gray-200 rounded-full h-2">
+                      <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                         <div
                           className={`h-2 rounded-full transition-all ${
                             capacityPercent >= 100
@@ -204,7 +205,7 @@ export default function Occasions() {
                           style={{ width: `${Math.min(capacityPercent, 100)}%` }}
                         />
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {occasion.remaining_capacity} spots remaining
                       </p>
                     </div>
@@ -212,7 +213,7 @@ export default function Occasions() {
 
                   {/* Organiser */}
                   {occasion.organiser_name && (
-                    <div className="pt-3 border-t text-sm text-gray-600">
+                    <div className="pt-3 border-t dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300">
                       <span className="font-medium">Organiser:</span> {occasion.organiser_name}
                     </div>
                   )}

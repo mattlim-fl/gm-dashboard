@@ -256,7 +256,7 @@ export const bookingService = {
   async getBookings(filters?: BookingFilters): Promise<BookingRow[]> {
     let query = supabase
       .from('bookings')
-      .select('*')
+      .select('*, booking_guests(*)')
       .order('booking_date', { ascending: false })
       .order('start_time', { ascending: true });
 
