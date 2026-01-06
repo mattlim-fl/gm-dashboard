@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { occasionService, OccasionWithStats } from '@/services/occasionService';
-import { Copy, Check, ExternalLink, Users, Calendar, DollarSign, Mail, Phone, Plus, UserPlus } from 'lucide-react';
+import { Copy, Check, ExternalLink, Users, Calendar, DollarSign, Mail, Phone, Plus, UserPlus, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface OccasionDetailPanelProps {
@@ -29,6 +29,9 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
   const [copiedShare, setCopiedShare] = useState(false);
   const [showAddGuestsDialog, setShowAddGuestsDialog] = useState(false);
   const [guestsToAdd, setGuestsToAdd] = useState(1);
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+  const [guestToDelete, setGuestToDelete] = useState<{ bookingId: string; index: number; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (occasionId && open) {
@@ -202,6 +205,35 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
       console.error('Error adding guest:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to add guest. Please try again.';
       alert(errorMessage);
+    }
+  };
+
+  const handleDeleteGuest = (bookingId: string, index: number, name: string) => {
+    setGuestToDelete({ bookingId, index, name });
+    setShowDeleteConfirmDialog(true);
+  };
+
+  const confirmDeleteGuest = async () => {
+    if (!guestToDelete || !occasion) return;
+    
+    setDeleting(true);
+    try {
+      await occasionService.removeGuestFromBooking(guestToDelete.bookingId, guestToDelete.index);
+      
+      setShowDeleteConfirmDialog(false);
+      setGuestToDelete(null);
+      
+      // Refresh the occasion data
+      if (onRefresh) {
+        onRefresh();
+      }
+      await loadOccasion();
+    } catch (err) {
+      console.error('Error deleting guest:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete guest. Please try again.';
+      alert(errorMessage);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -423,6 +455,7 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                         <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Guest Name</th>
                         <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Invited By</th>
                         <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="dark:bg-gray-900">
@@ -449,6 +482,18 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                                 <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                                   Organiser
                                 </Badge>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {!guest.isOrganiser && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteGuest(guest.bookingId, guest.index, currentValue || `Guest ${idx + 1}`)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               )}
                             </td>
                           </tr>
@@ -524,6 +569,40 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                   disabled={guestsToAdd > (occasion?.remaining_capacity || 0)}
                 >
                   Add {guestsToAdd} {guestsToAdd === 1 ? 'guest' : 'guests'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Guest Confirmation Dialog */}
+          <Dialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Remove Guest</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to remove <strong>{guestToDelete?.name || 'this guest'}</strong> from the guest list?
+                  <span className="block mt-2 text-sm">
+                    This action cannot be undone. The guest will be removed from the booking.
+                  </span>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowDeleteConfirmDialog(false);
+                    setGuestToDelete(null);
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={confirmDeleteGuest}
+                  disabled={deleting}
+                >
+                  {deleting ? 'Removing...' : 'Remove Guest'}
                 </Button>
               </DialogFooter>
             </DialogContent>

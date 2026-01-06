@@ -382,7 +382,7 @@ export const occasionService = {
       .from('bookings')
       .insert({
         parent_booking_id: occasionId,
-        customer_name: 'Walk-in / Staff Added',
+        customer_name: 'Staff Added',
         booking_type: 'vip_tickets',
         booking_date: occasion.booking_date,
         venue: occasion.venue,
@@ -400,6 +400,80 @@ export const occasionService = {
     }
 
     return booking;
+  },
+
+  /**
+   * Remove a guest from a booking by index
+   * If this is the last guest in the booking, the entire booking is cancelled
+   */
+  async removeGuestFromBooking(bookingId: string, guestIndex: number) {
+    // First, get the booking details
+    const { data: booking, error: bookingError } = await supabase
+      .from('bookings')
+      .select('ticket_quantity, booking_guests(*)')
+      .eq('id', bookingId)
+      .single();
+
+    if (bookingError || !booking) {
+      throw new Error(`Failed to fetch booking: ${bookingError?.message || 'Booking not found'}`);
+    }
+
+    const ticketQuantity = booking.ticket_quantity || 0;
+    const bookingGuests = booking.booking_guests || [];
+
+    // Validate the guest index
+    if (guestIndex < 0 || guestIndex >= ticketQuantity) {
+      throw new Error(`Invalid guest index: ${guestIndex}`);
+    }
+
+    // If this is the only guest, cancel the entire booking
+    if (ticketQuantity === 1) {
+      const { error: cancelError } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId);
+
+      if (cancelError) {
+        throw new Error(`Failed to cancel booking: ${cancelError.message}`);
+      }
+
+      return { bookingCancelled: true };
+    }
+
+    // Otherwise, reduce ticket quantity and remove the guest from booking_guests
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update({ ticket_quantity: ticketQuantity - 1 })
+      .eq('id', bookingId);
+
+    if (updateError) {
+      throw new Error(`Failed to update booking: ${updateError.message}`);
+    }
+
+    // Remove the specific guest from booking_guests if they exist
+    if (bookingGuests[guestIndex]) {
+      const guestToDelete = bookingGuests[guestIndex];
+      const { error: deleteGuestError } = await supabase
+        .from('booking_guests')
+        .delete()
+        .eq('id', guestToDelete.id);
+
+      if (deleteGuestError) {
+        console.error('Failed to delete guest record:', deleteGuestError);
+        // Non-fatal: the ticket_quantity has been updated
+      }
+    }
+
+    // If there are more guests after this index, we need to shift them
+    // This is handled by re-saving the guest list without the deleted guest
+    const remainingGuests = bookingGuests
+      .filter((_, idx) => idx !== guestIndex)
+      .map(g => g.guest_name);
+
+    // Delete all existing guests and re-insert
+    await this.updateBookingGuests(bookingId, remainingGuests);
+
+    return { bookingCancelled: false };
   },
 
   /**

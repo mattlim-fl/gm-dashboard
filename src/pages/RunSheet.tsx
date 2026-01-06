@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { useBookings } from "@/hooks/useBookings";
 import { updateVipTicketCheckins, BookingRow } from "@/services/bookingService";
 import { formatDateToISO } from "@/utils/dateUtils";
-import { CheckCheck, Search, Users, Mic2, Calendar, ArrowLeft, UserPlus, Star, Pencil, Check, X } from "lucide-react";
+import { CheckCheck, Search, Users, Mic2, Calendar, ArrowLeft, UserPlus, Star, Pencil, Check, X, ChevronUp, ChevronDown } from "lucide-react";
 import { QuickAddBookingDialog } from "@/components/bookings/QuickAddBookingDialog";
 import { BookingDetailsSidebar } from "@/components/bookings/BookingDetailsSidebar";
 import { customerService, CustomerRow } from "@/services/customerService";
@@ -47,6 +47,10 @@ export default function RunSheet() {
   const [editingGuestId, setEditingGuestId] = useState<string | null>(null);
   const [editingGuestName, setEditingGuestName] = useState<string>("");
   const [savingGuestName, setSavingGuestName] = useState(false);
+  
+  // Sorting
+  const [sortField, setSortField] = useState<'name' | 'reference' | 'organiser' | 'checked' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Member management
   const [selectedMember, setSelectedMember] = useState<CustomerRow | null>(null);
@@ -171,6 +175,22 @@ export default function RunSheet() {
 
   const handleBackToToday = () => {
     setSelectedDate(formatDateToISO(new Date()));
+  };
+
+  const handleSort = (field: 'name' | 'reference' | 'organiser' | 'checked') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: 'name' | 'reference' | 'organiser' | 'checked') => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? 
+      <ChevronUp className="h-4 w-4 ml-1 inline-block" /> : 
+      <ChevronDown className="h-4 w-4 ml-1 inline-block" />;
   };
 
   const handleStartEditGuest = (guestId: string, currentName: string) => {
@@ -366,7 +386,7 @@ export default function RunSheet() {
 
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
             <TabsList className="grid w-full grid-cols-3 h-10">
-              <TabsTrigger value="guests">Guests ({vipBookings.length})</TabsTrigger>
+              <TabsTrigger value="guests">Guests ({totalVipTickets})</TabsTrigger>
               <TabsTrigger value="karaoke">Karaoke ({karaokeBookings.length})</TabsTrigger>
               <TabsTrigger value="members" className="gap-1.5">
                  <Star className="h-3.5 w-3.5" /> Members
@@ -414,24 +434,6 @@ export default function RunSheet() {
                   booking: BookingRow;
                 }> = [];
 
-                // Build a map of booking IDs to organiser names for occasion bookings
-                const organiserMap = new Map<string, string>();
-                vipBookings.forEach((booking) => {
-                  const parentBookingId = (booking as any).parent_booking_id;
-                  const isOccasionOrganiser = (booking as any).is_occasion_organiser === true;
-                  
-                  if (isOccasionOrganiser) {
-                    // This booking is the organiser, use its customer_name
-                    organiserMap.set(booking.id, booking.customer_name || '');
-                  } else if (parentBookingId) {
-                    // Find the parent booking to get organiser name
-                    const parentBooking = vipBookings.find(b => b.id === parentBookingId);
-                    if (parentBooking) {
-                      organiserMap.set(booking.id, parentBooking.customer_name || '');
-                    }
-                  }
-                });
-
                 vipBookings.forEach((booking) => {
                   const max = booking.ticket_quantity || 0;
                   const checkins = attendance.vip[booking.id] || [];
@@ -446,8 +448,12 @@ export default function RunSheet() {
                       }))
                     : [];
 
-                  // Get organiser name for this booking
-                  const organiserName = organiserMap.get(booking.id) || null;
+                  // Get party organiser name - this is the customer who made this booking (their party/group)
+                  // Normalize "Walk-in / Staff Added" to "Staff Added"
+                  let organiserName = booking.customer_name || null;
+                  if (organiserName === 'Walk-in / Staff Added') {
+                    organiserName = 'Staff Added';
+                  }
 
                   // Add each ticket as a row
                   for (let idx = 0; idx < max; idx++) {
@@ -482,19 +488,85 @@ export default function RunSheet() {
                   );
                 }
 
+                // Sort the guests based on sortField and sortDirection
+                const sortedGuests = [...flatGuests].sort((a, b) => {
+                  if (!sortField) return 0;
+                  
+                  let aValue: string | boolean | number;
+                  let bValue: string | boolean | number;
+                  
+                  switch (sortField) {
+                    case 'name':
+                      aValue = a.guestName.toLowerCase();
+                      bValue = b.guestName.toLowerCase();
+                      break;
+                    case 'reference':
+                      aValue = a.referenceCode.toLowerCase();
+                      bValue = b.referenceCode.toLowerCase();
+                      break;
+                    case 'organiser':
+                      aValue = (a.organiserName || '').toLowerCase();
+                      bValue = (b.organiserName || '').toLowerCase();
+                      break;
+                    case 'checked':
+                      aValue = a.isChecked ? 1 : 0;
+                      bValue = b.isChecked ? 1 : 0;
+                      break;
+                    default:
+                      return 0;
+                  }
+                  
+                  if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+                  if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+                  return 0;
+                });
+
                 return (
                   <div className="border rounded-lg overflow-hidden">
                     <table className="w-full">
                       <thead className="bg-muted/50 border-b">
                         <tr>
-                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Name</th>
-                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Reference</th>
-                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Organiser</th>
-                          <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground">Check-in</th>
+                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground w-12">#</th>
+                          <th 
+                            className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('name')}
+                          >
+                            <span className="flex items-center">
+                              Name
+                              {getSortIcon('name')}
+                            </span>
+                          </th>
+                          <th 
+                            className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('reference')}
+                          >
+                            <span className="flex items-center">
+                              Reference
+                              {getSortIcon('reference')}
+                            </span>
+                          </th>
+                          <th 
+                            className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('organiser')}
+                          >
+                            <span className="flex items-center">
+                              Organiser
+                              {getSortIcon('organiser')}
+                            </span>
+                          </th>
+                          <th 
+                            className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
+                            onClick={() => handleSort('checked')}
+                          >
+                            <span className="flex items-center justify-end">
+                              Check-in
+                              {getSortIcon('checked')}
+                            </span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {flatGuests.map((guest) => {
+                        {sortedGuests.map((guest, index) => {
                           return (
                             <tr 
                               key={guest.id}
@@ -502,6 +574,9 @@ export default function RunSheet() {
                                 guest.isChecked ? 'opacity-60 bg-muted/20' : ''
                               }`}
                             >
+                              <td className="py-3 px-4 text-sm text-muted-foreground">
+                                {index + 1}
+                              </td>
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2">
                                   {editingGuestId === guest.id ? (
