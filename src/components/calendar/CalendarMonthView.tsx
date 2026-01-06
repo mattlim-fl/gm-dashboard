@@ -123,9 +123,12 @@ export const CalendarMonthView = ({
                             )}
                         >
                             <span className="font-medium mr-1">
-                                {booking.startTime}
+                                {booking.service === 'Occasion' ? '19:00' : booking.startTime}
                             </span>
                             {booking.customer.name}
+                            {booking.service === 'Occasion' && booking.bookingCount !== undefined && (
+                                <span className="ml-1 opacity-75">({booking.bookingCount})</span>
+                            )}
                         </div>
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-xs">
@@ -133,6 +136,9 @@ export const CalendarMonthView = ({
                             <div className="font-medium">{booking.customer.name}</div>
                             <div className="text-sm opacity-90">{booking.customer.phone}</div>
                             <div className="text-sm">{booking.guests} {booking.guests === 1 ? 'guest' : 'guests'}</div>
+                            {booking.service === 'Occasion' && booking.bookingCount !== undefined && (
+                                <div className="text-sm">{booking.bookingCount} {booking.bookingCount === 1 ? 'booking' : 'bookings'}</div>
+                            )}
                             <div className="text-sm">{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</div>
                             <div className="text-sm capitalize">{booking.service}</div>
                             <div className={cn("text-sm font-medium capitalize", 

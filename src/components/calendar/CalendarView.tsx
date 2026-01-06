@@ -10,6 +10,7 @@ import { UnifiedBookingSidePanel } from "@/components/bookings/UnifiedBookingSid
 import { CalendarBooking, CalendarResource } from "@/types/calendar";
 import { useKaraokeBooths } from "@/hooks/useKaraoke";
 import { useBookings } from "@/hooks/useBookings";
+import { occasionService, OccasionWithStats } from "@/services/occasionService";
 import { addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format } from "date-fns";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export const CalendarView = () => {
   // Fetch karaoke booths
   const { data: rawKaraokeBooths } = useKaraokeBooths();
   const { data: bookings } = useBookings();
+  const [occasions, setOccasions] = useState<OccasionWithStats[]>([]);
 
   // Filter active booths on the client side to be safe
   const karaokeBooths = useMemo(() => {
@@ -252,6 +254,16 @@ export const CalendarView = () => {
       });
     }
 
+    // Group 3: Occasions
+    const occasionResources: CalendarResource[] = [
+      { id: 'manor-occasion', name: 'Manor Occasions', type: 'venue' },
+      { id: 'hippie-occasion', name: 'Hippie Occasions', type: 'venue' }
+    ];
+    groups.push({
+      name: 'Occasions',
+      resources: occasionResources
+    });
+
     return groups;
   }, [karaokeBooths]);
 
@@ -267,6 +279,29 @@ export const CalendarView = () => {
       setHasInitializedFilter(true);
     }
   }, [allResources, hasInitializedFilter]);
+
+  // Fetch occasions for the current date range
+  useEffect(() => {
+    const loadOccasions = async () => {
+      const dateStrings = dateRange.map(formatDateToYMD);
+      if (dateStrings.length === 0) return;
+      
+      const dateFrom = dateStrings[0];
+      const dateTo = dateStrings[dateStrings.length - 1];
+      
+      try {
+        const data = await occasionService.getOccasions({
+          dateFrom,
+          dateTo,
+        });
+        setOccasions(data);
+      } catch (err) {
+        console.error('Failed to load occasions:', err);
+      }
+    };
+    
+    loadOccasions();
+  }, [dateRange]);
 
   // Get all real bookings for the current date range
   const dateRangeBookings = useMemo(() => {
@@ -323,8 +358,27 @@ export const CalendarView = () => {
         status: booking.status as 'confirmed' | 'pending' | 'cancelled',
         service: 'Venue Hire' as const,
       }));
+
+    // Map occasions to CalendarBooking format
+    const occasionBookings: CalendarBooking[] = occasions
+      .filter(occasion => dateStrings.includes(occasion.booking_date))
+      .map(occasion => ({
+        id: occasion.id,
+        resourceId: `${occasion.venue}-occasion`,
+        startTime: "19:00", // Default start time (evening)
+        endTime: "23:59",   // Default end time
+        date: occasion.booking_date,
+        customer: {
+          name: occasion.occasion_name,
+          phone: occasion.customer_phone || '',
+        },
+        guests: occasion.total_guests || 0,
+        status: occasion.status as 'confirmed' | 'pending' | 'cancelled',
+        service: 'Occasion' as const,
+        bookingCount: occasion.total_bookings,
+      }));
     
-    let allBookings = [...karaokeBookings, ...venueBookings];
+    let allBookings = [...karaokeBookings, ...venueBookings, ...occasionBookings];
     
     // Filter by search query if present
     if (searchQuery) {
@@ -332,13 +386,14 @@ export const CalendarView = () => {
         allBookings = allBookings.filter(booking => 
             booking.customer.name.toLowerCase().includes(query) ||
             booking.customer.phone?.toLowerCase().includes(query) ||
-            booking.id.toLowerCase().includes(query)
+            booking.id.toLowerCase().includes(query) ||
+            (booking.service === 'Occasion' && booking.bookingCount !== undefined && booking.bookingCount.toString().includes(query))
         );
     }
 
     // Filter by selected resources
     return allBookings.filter(booking => selectedResourceIds.includes(booking.resourceId));
-  }, [bookings, dateRange, selectedResourceIds, searchQuery]);
+  }, [bookings, dateRange, selectedResourceIds, searchQuery, occasions]);
 
   // For day view, show current date bookings
   const displayBookings = useMemo(() => {

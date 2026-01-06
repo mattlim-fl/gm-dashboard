@@ -10,7 +10,8 @@ export interface CalendarBooking {
   };
   guests: number;
   status: 'confirmed' | 'pending' | 'cancelled';
-  service: 'Karaoke' | 'Venue Hire';
+  service: 'Karaoke' | 'Venue Hire' | 'Occasion';
+  bookingCount?: number; // For occasions: number of bookings
 }
 
 export interface CalendarResource {

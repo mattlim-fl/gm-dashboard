@@ -46,6 +46,9 @@ export const BookingBlock = ({ booking, onClick }: BookingBlockProps) => {
       </div>
       <div className="opacity-75 truncate">
         {booking.guests} {booking.guests === 1 ? 'guest' : 'guests'}
+        {booking.service === 'Occasion' && booking.bookingCount !== undefined && (
+          <span className="ml-1">({booking.bookingCount} {booking.bookingCount === 1 ? 'booking' : 'bookings'})</span>
+        )}
       </div>
     </div>
   );
@@ -57,13 +60,25 @@ export const BookingBlock = ({ booking, onClick }: BookingBlockProps) => {
       </div>
       <div className="opacity-75 mt-1 truncate">
         {booking.guests} {booking.guests === 1 ? 'guest' : 'guests'}
+        {booking.service === 'Occasion' && booking.bookingCount !== undefined && (
+          <span className="ml-1">({booking.bookingCount} {booking.bookingCount === 1 ? 'booking' : 'bookings'})</span>
+        )}
       </div>
-      <div className="opacity-75 mt-1 truncate">
-        {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
-      </div>
-      <div className="opacity-75 mt-1 truncate capitalize">
-        {booking.service}
-      </div>
+      {booking.service !== 'Occasion' && (
+        <>
+          <div className="opacity-75 mt-1 truncate">
+            {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+          </div>
+          <div className="opacity-75 mt-1 truncate capitalize">
+            {booking.service}
+          </div>
+        </>
+      )}
+      {booking.service === 'Occasion' && (
+        <div className="opacity-75 mt-1 truncate capitalize">
+          Occasion
+        </div>
+      )}
     </div>
   );
 
@@ -72,7 +87,15 @@ export const BookingBlock = ({ booking, onClick }: BookingBlockProps) => {
       <div className="font-medium">{booking.customer.name}</div>
       <div className="text-sm opacity-90">{booking.customer.phone}</div>
       <div className="text-sm">{booking.guests} {booking.guests === 1 ? 'guest' : 'guests'}</div>
-      <div className="text-sm">{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</div>
+      {booking.service === 'Occasion' && booking.bookingCount !== undefined && (
+        <div className="text-sm">{booking.bookingCount} {booking.bookingCount === 1 ? 'booking' : 'bookings'}</div>
+      )}
+      {booking.service !== 'Occasion' && (
+        <div className="text-sm">{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</div>
+      )}
+      {booking.service === 'Occasion' && (
+        <div className="text-sm">{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</div>
+      )}
       <div className="text-sm capitalize">{booking.service}</div>
       <div className={cn("text-sm font-medium capitalize", 
         booking.status === 'confirmed' && "text-green-600 dark:text-green-400",

@@ -7,11 +7,25 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { mockUserSettings } from '@/data/mockData/settings';
 import { useToast } from '@/hooks/use-toast';
 
+// Default settings
+const defaultSettings = {
+  theme: 'light',
+  language: 'en',
+  timezone: 'America/New_York',
+  emailNotifications: true,
+  pushNotifications: false,
+  twoFactorEnabled: false,
+  privacy: {
+    profileVisibility: 'private',
+    showEmail: false,
+    showLastSeen: false,
+  },
+};
+
 export const UserSettings = () => {
-  const [settings, setSettings] = useState(mockUserSettings);
+  const [settings, setSettings] = useState(defaultSettings);
   const { toast } = useToast();
 
   const handleSave = () => {

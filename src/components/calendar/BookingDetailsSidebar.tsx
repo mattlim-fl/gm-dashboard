@@ -113,6 +113,13 @@ export const BookingDetailsSidebar = ({
                 <span className="text-sm font-medium">Guests:</span>
                 <span>{booking.guests} people</span>
               </div>
+              {booking.service === 'Occasion' && booking.bookingCount !== undefined && (
+                <div className="flex items-center gap-3">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Bookings:</span>
+                  <span>{booking.bookingCount} {booking.bookingCount === 1 ? 'booking' : 'bookings'}</span>
+                </div>
+              )}
             </div>
           </div>
 
