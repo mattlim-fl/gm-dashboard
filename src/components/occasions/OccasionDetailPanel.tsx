@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { occasionService, OccasionWithStats } from '@/services/occasionService';
-import { Copy, Check, ExternalLink, Users, Calendar, DollarSign, Mail, Phone, Plus, UserPlus, Trash2 } from 'lucide-react';
+import { Copy, Check, ExternalLink, Users, Calendar, DollarSign, Mail, Phone, Plus, UserPlus, Trash2, Edit, Save, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface OccasionDetailPanelProps {
@@ -32,6 +32,13 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [guestToDelete, setGuestToDelete] = useState<{ bookingId: string; index: number; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  
+  // Editing occasion details
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingOccasionName, setEditingOccasionName] = useState('');
+  const [editingCapacity, setEditingCapacity] = useState(0);
+  const [editingTicketPrice, setEditingTicketPrice] = useState(0);
+  const [savingOccasion, setSavingOccasion] = useState(false);
 
   useEffect(() => {
     if (occasionId && open) {
@@ -50,6 +57,11 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
       ]);
       setOccasion(occasionData);
       setBookings(bookingsData);
+      
+      // Initialize editing state
+      setEditingOccasionName(occasionData.occasion_name);
+      setEditingCapacity(occasionData.capacity);
+      setEditingTicketPrice(occasionData.ticket_price_cents / 100);
       
       // Build flat guest list
       const guests: { name: string; invitedBy: string; isOrganiser: boolean; bookingId: string; index: number }[] = [];
@@ -111,6 +123,44 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
       }
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleStartEdit = () => {
+    if (!occasion) return;
+    setEditingOccasionName(occasion.occasion_name);
+    setEditingCapacity(occasion.capacity);
+    setEditingTicketPrice(occasion.ticket_price_cents / 100);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    if (!occasion) return;
+    setEditingOccasionName(occasion.occasion_name);
+    setEditingCapacity(occasion.capacity);
+    setEditingTicketPrice(occasion.ticket_price_cents / 100);
+    setIsEditing(false);
+  };
+
+  const handleSaveOccasion = async () => {
+    if (!occasion || !occasionId) return;
+    
+    setSavingOccasion(true);
+    try {
+      await occasionService.updateOccasion(occasionId, {
+        name: editingOccasionName,
+        capacity: editingCapacity,
+        ticket_price_cents: Math.round(editingTicketPrice * 100),
+      });
+      
+      setIsEditing(false);
+      await loadOccasion();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Failed to save occasion:', err);
+      alert('Failed to save occasion details. Please try again.');
+    } finally {
+      setSavingOccasion(false);
     }
   };
 
@@ -240,7 +290,7 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
   if (!occasion) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto" hideCloseButton>
           <SheetHeader>
             <SheetTitle>Occasion Details</SheetTitle>
           </SheetHeader>
@@ -260,17 +310,62 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto" hideCloseButton>
         <SheetHeader className="pb-4 border-b dark:border-gray-700 text-left">
           <div className="space-y-3">
-            <SheetTitle className="text-3xl font-bold dark:text-white text-left">{occasion.occasion_name}</SheetTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
-                {occasion.venue === 'manor' ? 'Manor' : 'Hippie Club'}
-              </Badge>
-              <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
-                {occasion.status}
-              </Badge>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 space-y-3">
+                {isEditing ? (
+                  <Input
+                    value={editingOccasionName}
+                    onChange={(e) => setEditingOccasionName(e.target.value)}
+                    className="text-3xl font-bold h-auto py-2"
+                    placeholder="Occasion name"
+                  />
+                ) : (
+                  <SheetTitle className="text-3xl font-bold dark:text-white text-left">{occasion.occasion_name}</SheetTitle>
+                )}
+                <div className="flex items-center gap-2">
+                  <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
+                    {occasion.venue === 'manor' ? 'Manor' : 'Hippie Club'}
+                  </Badge>
+                  <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
+                    {occasion.status}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {isEditing ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      disabled={savingOccasion}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveOccasion}
+                      disabled={savingOccasion}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {savingOccasion ? 'Saving...' : 'Save'}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleStartEdit}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </SheetHeader>
@@ -283,16 +378,33 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                 <Users className="h-4 w-4" />
                 <span>Capacity</span>
               </div>
-              <div className="text-2xl font-semibold dark:text-white">{occasion.total_guests}/{occasion.capacity}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {occasion.remaining_capacity} spots left
-              </div>
-              <div className="mt-2 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all"
-                  style={{ width: `${Math.min(capacityPercent, 100)}%` }}
-                />
-              </div>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <Input
+                    type="number"
+                    value={editingCapacity}
+                    onChange={(e) => setEditingCapacity(parseInt(e.target.value) || 0)}
+                    className="text-2xl font-semibold h-auto py-2"
+                    min={occasion.total_guests}
+                  />
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {Math.max(0, editingCapacity - occasion.total_guests)} spots left
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-semibold dark:text-white">{occasion.total_guests}/{occasion.capacity}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {occasion.remaining_capacity} spots left
+                  </div>
+                  <div className="mt-2 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(capacityPercent, 100)}%` }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
@@ -308,8 +420,27 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                 <DollarSign className="h-4 w-4" />
                 <span>Ticket Price</span>
               </div>
-              <div className="text-2xl font-semibold dark:text-white">${ticketPrice}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">per ticket</div>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-2xl font-semibold dark:text-white">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editingTicketPrice}
+                      onChange={(e) => setEditingTicketPrice(parseFloat(e.target.value) || 0)}
+                      className="text-2xl font-semibold h-auto py-2 flex-1"
+                      min="0"
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">per ticket</div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-semibold dark:text-white">${ticketPrice}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">per ticket</div>
+                </>
+              )}
             </div>
           </div>
 
