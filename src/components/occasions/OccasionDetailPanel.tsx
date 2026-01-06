@@ -17,6 +17,7 @@ interface OccasionDetailPanelProps {
 export default function OccasionDetailPanel({ occasionId, open, onOpenChange, onRefresh }: OccasionDetailPanelProps) {
   const [occasion, setOccasion] = useState<OccasionWithStats | null>(null);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [allGuests, setAllGuests] = useState<{ name: string; invitedBy: string; isOrganiser: boolean }[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedOrganiser, setCopiedOrganiser] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
@@ -38,6 +39,37 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
       ]);
       setOccasion(occasionData);
       setBookings(bookingsData);
+      
+      // Build flat guest list
+      const guests: { name: string; invitedBy: string; isOrganiser: boolean }[] = [];
+      
+      // Add organiser first
+      if (occasionData.organiser_name) {
+        guests.push({
+          name: occasionData.organiser_name,
+          invitedBy: 'Organiser',
+          isOrganiser: true
+        });
+      }
+      
+      // Add all guests from bookings
+      bookingsData.forEach((booking: any) => {
+        const invitedBy = booking.customer_name || 'Unknown';
+        const ticketQuantity = booking.ticket_quantity || 0;
+        const existingGuests = booking.booking_guests || [];
+        
+        // Add all tickets (with or without names)
+        for (let i = 0; i < ticketQuantity; i++) {
+          const guestName = existingGuests[i]?.guest_name || '';
+          guests.push({
+            name: guestName,
+            invitedBy,
+            isOrganiser: false
+          });
+        }
+      });
+      
+      setAllGuests(guests);
     } catch (err) {
       console.error('Failed to load occasion:', err);
     } finally {
@@ -67,7 +99,7 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
           <SheetHeader>
             <SheetTitle>Occasion Details</SheetTitle>
           </SheetHeader>
-          {loading && <div className="py-8 text-center text-gray-500">Loading...</div>}
+          {loading && <div className="py-8 text-center text-gray-500 dark:text-gray-400">Loading...</div>}
         </SheetContent>
       </Sheet>
     );
@@ -84,18 +116,16 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <SheetTitle className="text-2xl">{occasion.name}</SheetTitle>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
-                  {occasion.venue === 'manor' ? 'Manor' : 'Hippie Club'}
-                </Badge>
-                <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
-                  {occasion.status}
-                </Badge>
-              </div>
+        <SheetHeader className="pb-4 border-b dark:border-gray-700 text-left">
+          <div className="space-y-3">
+            <SheetTitle className="text-3xl font-bold dark:text-white text-left">{occasion.occasion_name}</SheetTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
+                {occasion.venue === 'manor' ? 'Manor' : 'Hippie Club'}
+              </Badge>
+              <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
+                {occasion.status}
+              </Badge>
             </div>
           </div>
         </SheetHeader>
@@ -103,38 +133,38 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
         <div className="space-y-6 mt-6">
           {/* Key Stats */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-sm mb-1">
                 <Users className="h-4 w-4" />
                 <span>Capacity</span>
               </div>
-              <div className="text-2xl font-semibold">{occasion.total_guests}/{occasion.capacity}</div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-2xl font-semibold dark:text-white">{occasion.total_guests}/{occasion.capacity}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {occasion.remaining_capacity} spots left
               </div>
-              <div className="mt-2 bg-gray-200 rounded-full h-2">
+              <div className="mt-2 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all"
                   style={{ width: `${Math.min(capacityPercent, 100)}%` }}
                 />
               </div>
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-sm mb-1">
                 <Calendar className="h-4 w-4" />
                 <span>Date</span>
               </div>
-              <div className="text-sm font-medium">{formattedDate}</div>
+              <div className="text-sm font-medium dark:text-white">{formattedDate}</div>
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-gray-600 text-sm mb-1">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-sm mb-1">
                 <DollarSign className="h-4 w-4" />
                 <span>Ticket Price</span>
               </div>
-              <div className="text-2xl font-semibold">${ticketPrice}</div>
-              <div className="text-xs text-gray-500 mt-1">per ticket</div>
+              <div className="text-2xl font-semibold dark:text-white">${ticketPrice}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">per ticket</div>
             </div>
           </div>
 
@@ -143,26 +173,26 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
             <>
               <Separator />
               <div>
-                <h3 className="font-semibold mb-3">Organiser</h3>
+                <h3 className="font-semibold mb-3 dark:text-white">Organiser</h3>
                 <div className="space-y-2 text-sm">
                   {occasion.organiser_name && (
                     <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-gray-400" />
-                      <span>{occasion.organiser_name}</span>
+                      <Users className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                      <span className="dark:text-gray-200">{occasion.organiser_name}</span>
                     </div>
                   )}
                   {occasion.organiser_email && (
                     <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <a href={`mailto:${occasion.organiser_email}`} className="text-blue-600 hover:underline">
+                      <Mail className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                      <a href={`mailto:${occasion.organiser_email}`} className="text-blue-600 dark:text-blue-400 hover:underline">
                         {occasion.organiser_email}
                       </a>
                     </div>
                   )}
                   {occasion.organiser_phone && (
                     <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                      <a href={`tel:${occasion.organiser_phone}`} className="text-blue-600 hover:underline">
+                      <Phone className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                      <a href={`tel:${occasion.organiser_phone}`} className="text-blue-600 dark:text-blue-400 hover:underline">
                         {occasion.organiser_phone}
                       </a>
                     </div>
@@ -175,17 +205,17 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
           {/* Links */}
           <Separator />
           <div className="space-y-4">
-            <h3 className="font-semibold">Shareable Links</h3>
+            <h3 className="font-semibold dark:text-white">Shareable Links</h3>
             
             {/* Organiser Link */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Organiser Link</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Organiser Link</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={organiserUrl}
                   readOnly
-                  className="flex-1 px-3 py-2 border rounded-md bg-gray-50 text-sm font-mono"
+                  className="flex-1 px-3 py-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 text-sm font-mono"
                 />
                 <Button
                   size="sm"
@@ -202,18 +232,18 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                   <ExternalLink className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-xs text-gray-500">Share this with the organiser to manage their guest list</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Share this with the organiser to manage their guest list</p>
             </div>
 
             {/* Share Link for Friends */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Friend Purchase Link</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-200">Friend Purchase Link</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={shareUrl}
                   readOnly
-                  className="flex-1 px-3 py-2 border rounded-md bg-gray-50 text-sm font-mono"
+                  className="flex-1 px-3 py-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 text-sm font-mono"
                 />
                 <Button
                   size="sm"
@@ -230,44 +260,50 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                   <ExternalLink className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-xs text-gray-500">Share this link so friends can purchase tickets</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Share this link so friends can purchase tickets</p>
             </div>
           </div>
 
-          {/* Bookings */}
+          {/* Guest List Table */}
           <Separator />
           <div>
-            <h3 className="font-semibold mb-3">Bookings ({occasion.total_bookings})</h3>
-            {bookings.length === 0 ? (
-              <p className="text-sm text-gray-500 py-4 text-center">No bookings yet</p>
+            <h3 className="font-semibold mb-3 dark:text-white">Guest List ({allGuests.length})</h3>
+            {allGuests.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">No guests yet</p>
             ) : (
-              <div className="space-y-3">
-                {bookings.map((booking) => (
-                  <div key={booking.id} className="border rounded-lg p-4 space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-medium">{booking.customer_name}</div>
-                        <div className="text-sm text-gray-600">
-                          {booking.customer_email || booking.customer_phone}
-                        </div>
-                      </div>
-                      <Badge variant="outline">
-                        {booking.ticket_quantity} {booking.ticket_quantity === 1 ? 'ticket' : 'tickets'}
-                      </Badge>
-                    </div>
-                    {booking.booking_guests && booking.booking_guests.length > 0 && (
-                      <div className="text-sm text-gray-600">
-                        <span className="font-medium">Guests:</span>{' '}
-                        {booking.booking_guests.map((g: any) => g.guest_name).join(', ')}
-                      </div>
-                    )}
-                    {booking.reference_code && (
-                      <div className="text-xs text-gray-500 font-mono">
-                        Ref: {booking.reference_code}
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div className="overflow-x-auto border dark:border-gray-700 rounded-lg">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr className="border-b dark:border-gray-700">
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">#</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Guest Name</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Invited By</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</th>
+                    </tr>
+                  </thead>
+                  <tbody className="dark:bg-gray-900">
+                    {allGuests.map((guest, idx) => (
+                      <tr key={idx} className="border-b dark:border-gray-700 last:border-b-0">
+                        <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">{idx + 1}</td>
+                        <td className="py-3 px-4 text-sm">
+                          {guest.name ? (
+                            <span className="text-gray-900 dark:text-gray-100">{guest.name}</span>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500 italic">Guest {idx + 1} full name</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-300">{guest.invitedBy}</td>
+                        <td className="py-3 px-4">
+                          {guest.isOrganiser && (
+                            <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                              Organiser
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -277,8 +313,8 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
             <>
               <Separator />
               <div>
-                <h3 className="font-semibold mb-2">Notes</h3>
-                <p className="text-sm text-gray-600 whitespace-pre-wrap">{occasion.notes}</p>
+                <h3 className="font-semibold mb-2 dark:text-white">Notes</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{occasion.notes}</p>
               </div>
             </>
           )}
