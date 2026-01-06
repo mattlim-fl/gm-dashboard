@@ -1,6 +1,16 @@
-// Simple date formatting utilities
-export function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
+import { format } from 'date-fns';
+
+/**
+ * Unified date formatting utilities
+ * Consolidates all date formatting needs across the application
+ */
+
+/**
+ * Formats a date to a full readable string (e.g., "Monday, January 15, 2024")
+ */
+export function formatDate(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -8,6 +18,10 @@ export function formatDate(date: Date): string {
   });
 }
 
+/**
+ * Formats a date to ISO format (YYYY-MM-DD) without timezone conversion
+ * Useful for form inputs and database storage
+ */
 export function formatDateToISO(date: Date): string {
   // Return local date in YYYY-MM-DD without timezone conversion to avoid off-by-one issues
   const year = date.getFullYear();
@@ -16,10 +30,52 @@ export function formatDateToISO(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function formatDateShort(date: Date): string {
-  return date.toLocaleDateString('en-US', {
+/**
+ * Formats a date to a short readable string (e.g., "Jan 15, 2024")
+ */
+export function formatDateShort(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   });
+}
+
+/**
+ * Formats a date string to UK format (e.g., "15 Jan 2024")
+ * Used in booking tables and details
+ */
+export function formatDateUK(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+}
+
+/**
+ * Formats a date to short format using date-fns (e.g., "15/01")
+ * Used in booking history
+ */
+export function formatDateCompact(dateString: string): string {
+  return format(new Date(dateString), 'dd/MM');
+}
+
+/**
+ * Formats a date to full readable format using date-fns (e.g., "Monday, January 15, 2024")
+ * Used in booking history
+ */
+export function formatDateFull(dateString: string): string {
+  return format(new Date(dateString), 'EEEE, MMMM d, yyyy');
+}
+
+/**
+ * Formats a time string (assumes HH:mm format)
+ * Returns null if timeString is null/undefined
+ */
+export function formatTime(timeString: string | null | undefined): string | null {
+  if (!timeString) return null;
+  // Assuming time is in HH:mm format
+  return timeString;
 } 

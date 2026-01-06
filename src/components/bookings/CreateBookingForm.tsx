@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +18,9 @@ import { useKaraokeBooths, useCreateKaraokeHold, useReleaseKaraokeHold, useFinal
 import { karaokeService } from "@/services/karaokeService";
 import { useToast } from "@/hooks/use-toast";
 import { BookingCalendarView } from "./BookingCalendarView";
+import { createBookingSchema, type CreateBookingFormValues } from "@/schemas/bookingSchemas";
+import { VENUE_OPTIONS, BOOKING_TYPE_OPTIONS, VENUE_AREA_OPTIONS, TIME_SLOTS } from "@/constants/bookingConstants";
+import { handleErrorSilently } from "@/utils/errorHandling";
 
 interface AvailableBooth {
   id: string;
@@ -37,97 +39,6 @@ interface HoldResponse {
   };
 }
 
-const bookingFormSchema = z.object({
-  customerName: z.string().min(2, "Customer name must be at least 2 characters"),
-  customerEmail: z.string().email("Please enter a valid email address").optional().or(z.literal("")),
-  customerPhone: z.string().min(1, "Please enter a phone number").optional().or(z.literal("")),
-  bookingType: z.enum(["venue_hire", "vip_tickets", "karaoke_booking"], {
-    required_error: "Please select a booking type"
-  }),
-  venue: z.enum(["manor", "hippie"], {
-    required_error: "Please select a venue"
-  }),
-  venueArea: z.enum(["upstairs", "downstairs", "full_venue"]).optional(),
-  karaokeBoothId: z.string().optional(), // For karaoke bookings
-  bookingDate: z.string().min(1, "Please select a date"),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  guestCount: z.string().optional(),
-  ticketQuantity: z.string().optional(),
-  specialRequests: z.string().optional(),
-  totalAmount: z.string().optional(),
-  costPerTicket: z.string().optional(),
-  staffNotes: z.string().optional(),
-}).refine((data) => {
-  // At least one contact method required
-  return data.customerEmail || data.customerPhone;
-}, {
-  message: "Please provide either email or phone number",
-  path: ["customerEmail"],
-}).refine((data) => {
-  // Venue area required for venue hire
-  if (data.bookingType === "venue_hire" && !data.venueArea) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please select a venue area for venue hire bookings",
-  path: ["venueArea"],
-}).refine((data) => {
-  // Ticket quantity required for VIP tickets
-  if (data.bookingType === "vip_tickets" && !data.ticketQuantity) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please specify ticket quantity for VIP ticket bookings",
-  path: ["ticketQuantity"],
-}).refine((data) => {
-  // Guest count required for venue hire
-  if (data.bookingType === "venue_hire" && !data.guestCount) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please specify number of guests for venue hire bookings",
-  path: ["guestCount"],
-}).refine((data) => {
-  // Karaoke booth required for karaoke bookings
-  if (data.bookingType === "karaoke_booking" && !data.karaokeBoothId) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please select a karaoke booth for karaoke bookings",
-  path: ["karaokeBoothId"],
-});
-
-type BookingFormValues = z.infer<typeof bookingFormSchema>;
-
-const venueOptions = [
-  { value: "manor", label: "Manor" },
-  { value: "hippie", label: "Hippie Club" },
-];
-
-const bookingTypeOptions = [
-  { value: "venue_hire", label: "Venue Hire" },
-  { value: "vip_tickets", label: "VIP Tickets" },
-  { value: "karaoke_booking", label: "Karaoke Booking" },
-];
-
-const venueAreaOptions = [
-  { value: "upstairs", label: "Upstairs" },
-  { value: "downstairs", label: "Downstairs" },
-  { value: "full_venue", label: "Full Venue" },
-];
-
-const timeSlots = [
-  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
-  "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
-  "18:00", "18:30", "19:00", "19:30", "20:00", "20:30",
-  "21:00", "21:30", "22:00", "22:30", "23:00",
-];
 
 interface CreateBookingFormProps {
   onSuccess?: () => void;
@@ -145,8 +56,8 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
   const [activeHoldId, setActiveHoldId] = useState<string | null>(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
 
-  const form = useForm<BookingFormValues>({
-    resolver: zodResolver(bookingFormSchema),
+  const form = useForm<CreateBookingFormValues>({
+    resolver: zodResolver(createBookingSchema),
     defaultValues: {
       customerName: "",
       customerEmail: "",
@@ -205,7 +116,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
   // Available time slots based on selected booth or default
   const availableTimeSlots = selectedBooth && selectedBooth.operating_hours_start && selectedBooth.operating_hours_end
     ? generateTimeSlots(selectedBooth.operating_hours_start, selectedBooth.operating_hours_end)
-    : timeSlots;
+    : TIME_SLOTS;
 
   // Venue-level availability for karaoke (choose time first, then booth)
   const { data: venueAvailability } = useKaraokeAvailability({
@@ -287,7 +198,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
     return "";
   };
 
-  const onSubmit = async (data: BookingFormValues) => {
+  const onSubmit = async (data: CreateBookingFormValues) => {
     try {
       if (data.bookingType === 'karaoke_booking') {
         if (!activeHoldId) {
@@ -332,8 +243,11 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
       } else {
         navigate('/bookings');
       }
-    } catch (_error) {
-      // Silent fail for booking creation
+    } catch (error) {
+      handleErrorSilently(error, {
+        operation: "Create booking",
+        component: "CreateBookingForm",
+      });
     }
   };
 
@@ -414,7 +328,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {venueOptions.map((option) => (
+                          {VENUE_OPTIONS.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
                             </SelectItem>
@@ -439,7 +353,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {bookingTypeOptions.map((option) => (
+                          {BOOKING_TYPE_OPTIONS.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
                             </SelectItem>
@@ -467,7 +381,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {venueAreaOptions.map((option) => (
+                          {VENUE_AREA_OPTIONS.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
                             </SelectItem>

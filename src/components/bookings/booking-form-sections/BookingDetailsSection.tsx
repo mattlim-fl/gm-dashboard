@@ -24,31 +24,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatDateToISO } from "@/utils/dateUtils";
 import { UnifiedBookingFormValues } from "../UnifiedBookingSidePanel";
 import { AvailabilityResponse } from "@/types/karaoke";
-
-const venueOptions = [
-  { value: "manor", label: "Manor" },
-  { value: "hippie", label: "Hippie Club" },
-];
-
-const bookingTypeOptions = [
-  { value: "venue_hire", label: "Venue Hire" },
-  { value: "vip_tickets", label: "VIP Tickets" },
-  { value: "karaoke_booking", label: "Karaoke Booking" },
-];
-
-const venueAreaOptions = [
-  { value: "upstairs", label: "Upstairs" },
-  { value: "downstairs", label: "Downstairs" },
-  { value: "full_venue", label: "Full Venue" },
-];
-
-const timeSlots = [
-  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
-  "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
-  "18:00", "18:30", "19:00", "19:30", "20:00", "20:30",
-  "21:00", "21:30", "22:00", "22:30", "23:00",
-];
+import { VENUE_OPTIONS, BOOKING_TYPE_OPTIONS, VENUE_AREA_OPTIONS, TIME_SLOTS } from "@/constants/bookingConstants";
 
 interface BookingDetailsSectionProps {
   control: Control<UnifiedBookingFormValues>;
@@ -136,7 +112,7 @@ export const BookingDetailsSection = ({
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {venueOptions.map((option) => (
+                {VENUE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -162,7 +138,7 @@ export const BookingDetailsSection = ({
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {bookingTypeOptions.map((option) => (
+                {BOOKING_TYPE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -219,7 +195,7 @@ export const BookingDetailsSection = ({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {timeSlots.map((time) => (
+                    {TIME_SLOTS.map((time) => (
                       <SelectItem key={time} value={time}>
                         {time}
                       </SelectItem>
@@ -243,7 +219,7 @@ export const BookingDetailsSection = ({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {timeSlots.map((time) => (
+                    {TIME_SLOTS.map((time) => (
                       <SelectItem key={time} value={time}>
                         {time}
                       </SelectItem>
@@ -272,7 +248,7 @@ export const BookingDetailsSection = ({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {venueAreaOptions.map((option) => (
+                  {VENUE_AREA_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -9,24 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCreateBooking } from "@/hooks/useBookings";
 import { CreateBookingData } from "@/services/bookingService";
 import { formatDateToISO } from "@/utils/dateUtils";
-
-const quickBookingSchema = z.object({
-  customerName: z.string().min(2, "Name required"),
-  customerEmail: z.string().email().optional().or(z.literal("")),
-  customerPhone: z.string().optional(),
-  bookingType: z.enum(["vip_tickets", "karaoke_booking", "venue_hire"]),
-  venue: z.enum(["manor", "hippie"]),
-  quantity: z.string().min(1, "Required"),
-  bookingDate: z.string().optional(),
-}).refine((data) => {
-  // Either email or phone must be provided
-  return data.customerEmail || data.customerPhone;
-}, {
-  message: "Email or Phone required",
-  path: ["customerEmail"],
-});
-
-type QuickBookingFormValues = z.infer<typeof quickBookingSchema>;
+import { quickBookingSchema, type QuickBookingFormValues } from "@/schemas/bookingSchemas";
+import { VENUE_OPTIONS, BOOKING_TYPE_OPTIONS } from "@/constants/bookingConstants";
+import { handleErrorSilently } from "@/utils/errorHandling";
 
 interface QuickAddBookingFormProps {
   defaultCustomerName?: string;
@@ -101,8 +85,11 @@ export function QuickAddBookingForm({
       await createBookingMutation.mutateAsync(bookingData);
       form.reset();
       onSuccess?.();
-    } catch (_error) {
-      // Silent fail for booking creation
+    } catch (error) {
+      handleErrorSilently(error, {
+        operation: "Quick add booking",
+        component: "QuickAddBookingForm",
+      });
     }
   };
 
@@ -166,8 +153,11 @@ export function QuickAddBookingForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="manor">Manor</SelectItem>
-                    <SelectItem value="hippie">Hippie Door</SelectItem>
+                    {VENUE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -187,9 +177,11 @@ export function QuickAddBookingForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="vip_tickets">VIP Ticket</SelectItem>
-                    <SelectItem value="karaoke_booking">Karaoke</SelectItem>
-                    <SelectItem value="venue_hire">Venue Hire</SelectItem>
+                    {BOOKING_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />

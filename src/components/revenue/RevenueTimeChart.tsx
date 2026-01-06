@@ -13,6 +13,7 @@ import {
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear, eachWeekOfInterval, eachMonthOfInterval, eachYearOfInterval, addWeeks, addMonths, addYears } from 'date-fns';
+import { formatCurrency as formatCurrencyUtil } from '@/utils/currencyUtils';
 
 interface RevenueDataPoint {
   period: string;
@@ -159,7 +160,7 @@ export const RevenueTimeChart = () => {
       return {
         period: format(week.weekStart, 'MMM dd'),
         revenue,
-        formattedRevenue: formatCurrency(revenue),
+        formattedRevenue: formatCurrencyUtil(revenue, { inputInCents: true, excludeGST: true }),
         date: week.weekStart,
         bar: barRevenue,
         door: doorRevenue,
@@ -224,7 +225,7 @@ export const RevenueTimeChart = () => {
       return {
         period: format(monthStart, 'MMM yyyy'),
         revenue: (row as any).total_revenue_cents,
-        formattedRevenue: formatCurrency((row as any).total_revenue_cents),
+        formattedRevenue: formatCurrencyUtil((row as any).total_revenue_cents, { inputInCents: true, excludeGST: true }),
         date: monthStart,
         bar: (row as any).bar_revenue_cents,
         door: (row as any).door_revenue_cents,
@@ -276,7 +277,7 @@ export const RevenueTimeChart = () => {
       return {
         period: format(yearStart, 'yyyy'),
         revenue: (row as any).total_revenue_cents,
-        formattedRevenue: formatCurrency((row as any).total_revenue_cents),
+        formattedRevenue: formatCurrencyUtil((row as any).total_revenue_cents, { inputInCents: true, excludeGST: true }),
         date: yearStart,
         bar: (row as any).bar_revenue_cents,
         door: (row as any).door_revenue_cents,
@@ -286,15 +287,7 @@ export const RevenueTimeChart = () => {
   };
 
   const formatCurrency = (value: number): string => {
-    // Convert from cents to dollars, then from GST inclusive to GST exclusive
-    const dollars = value / 100;
-    const gstExclusiveAmount = dollars / 1.1;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(gstExclusiveAmount);
+    return formatCurrencyUtil(value, { inputInCents: true, excludeGST: true });
   };
 
   const formatTooltipValue = (value: number) => {

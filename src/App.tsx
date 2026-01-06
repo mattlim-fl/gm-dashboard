@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
+import { HomeRoute } from "@/components/auth/HomeRoute";
 import Dashboard from "./pages/Dashboard";
 import Calendar from "./pages/Calendar";
 import Bookings from "./pages/Bookings";
@@ -38,15 +39,11 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
+              <Route path="/" element={<HomeRoute />} />
               <Route path="/dashboard" element={
-                <ProtectedRoute>
+                <AdminRoute>
                   <Dashboard />
-                </ProtectedRoute>
+                </AdminRoute>
               } />
               <Route path="/calendar" element={
                 <ProtectedRoute>

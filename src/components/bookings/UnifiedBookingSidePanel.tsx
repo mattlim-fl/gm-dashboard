@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { format } from "date-fns";
+import { unifiedBookingSchema, type UnifiedBookingFormValues } from "@/schemas/bookingSchemas";
 import {
   Sheet,
   SheetContent,
@@ -25,6 +25,8 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useToast } from "@/hooks/use-toast";
 import { User, CalendarDays, FileText } from "lucide-react";
 import { CustomerDetailsSection } from "./booking-form-sections/CustomerDetailsSection";
+import { handleErrorSilently } from "@/utils/errorHandling";
+import { toVenue } from "@/utils/typeGuards";
 
 interface HoldResponse {
   hold?: {
@@ -35,94 +37,6 @@ interface HoldResponse {
 import { BookingDetailsSection } from "./booking-form-sections/BookingDetailsSection";
 import { BookingOptionsSection } from "./booking-form-sections/BookingOptionsSection";
 import { AdditionalDetailsSection } from "./booking-form-sections/AdditionalDetailsSection";
-
-// Schema for unified booking form
-const unifiedBookingSchema = z.object({
-  // Customer Info
-  customerId: z.string().optional(),
-  customerName: z.string().min(2, "Customer name must be at least 2 characters").optional(),
-  customerEmail: z.string().email("Please enter a valid email address").optional().or(z.literal("")),
-  customerPhone: z.string().optional().or(z.literal("")),
-  // Date & Time
-  bookingDate: z.string().min(1, "Please select a date"),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  // Booking Details
-  venue: z.enum(["manor", "hippie"]).optional(),
-  bookingType: z.enum(["venue_hire", "vip_tickets", "karaoke_booking"]).optional(),
-  venueArea: z.enum(["upstairs", "downstairs", "full_venue"]).optional(),
-  karaokeBoothId: z.string().optional(),
-  guestCount: z.string().optional(),
-  ticketQuantity: z.string().optional(),
-  // Additional Details
-  specialRequests: z.string().optional(),
-  staffNotes: z.string().optional(),
-  totalAmount: z.string().optional(),
-  costPerTicket: z.string().optional(),
-}).refine((data) => {
-  // Venue is required
-  return data.venue !== undefined;
-}, {
-  message: "Please select a venue",
-  path: ["venue"],
-}).refine((data) => {
-  // Booking type is required
-  return data.bookingType !== undefined;
-}, {
-  message: "Please select a booking type",
-  path: ["bookingType"],
-}).refine((data) => {
-  // Either customerId or customerName must be provided
-  return data.customerId || (data.customerName && data.customerName.length >= 2);
-}, {
-  message: "Please select a customer or enter customer name",
-  path: ["customerName"],
-}).refine((data) => {
-  // At least one contact method required (unless customerId is provided)
-  if (data.customerId) return true;
-  return data.customerEmail || data.customerPhone;
-}, {
-  message: "Please provide either email or phone number",
-  path: ["customerEmail"],
-}).refine((data) => {
-  // Venue area required for venue hire
-  if (data.bookingType === "venue_hire" && !data.venueArea) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please select a venue area for venue hire bookings",
-  path: ["venueArea"],
-}).refine((data) => {
-  // Ticket quantity required for VIP tickets
-  if (data.bookingType === "vip_tickets" && !data.ticketQuantity) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please specify ticket quantity for VIP ticket bookings",
-  path: ["ticketQuantity"],
-}).refine((data) => {
-  // Guest count required for venue hire and karaoke
-  if ((data.bookingType === "venue_hire" || data.bookingType === "karaoke_booking") && !data.guestCount) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please specify number of guests",
-  path: ["guestCount"],
-}).refine((data) => {
-  // Karaoke booth required for karaoke bookings
-  if (data.bookingType === "karaoke_booking" && !data.karaokeBoothId) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Please select a karaoke booth for karaoke bookings",
-  path: ["karaokeBoothId"],
-});
-
-export type UnifiedBookingFormValues = z.infer<typeof unifiedBookingSchema>;
 
 interface UnifiedBookingSidePanelProps {
   isOpen: boolean;
@@ -186,7 +100,7 @@ export const UnifiedBookingSidePanel = ({
 
   // Karaoke availability - only fetch when we have all required values
   const { data: venueAvailability } = useKaraokeAvailability({
-    venue: bookingType === "karaoke_booking" && venue ? (venue as "manor" | "hippie") : undefined,
+    venue: bookingType === "karaoke_booking" && venue ? toVenue(venue) : undefined,
     bookingDate: bookingType === "karaoke_booking" && bookingDate ? bookingDate : undefined,
     granularityMinutes: 60,
   });
@@ -360,8 +274,11 @@ export const UnifiedBookingSidePanel = ({
       setHoldExpiresAt(null);
       onClose();
       onSuccess?.();
-    } catch (_error) {
-      // Silent fail for booking creation
+    } catch (error) {
+      handleErrorSilently(error, {
+        operation: "Create/update booking",
+        component: "UnifiedBookingSidePanel",
+      });
     }
   };
 

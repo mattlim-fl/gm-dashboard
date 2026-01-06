@@ -9,6 +9,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PnlComparisonChart } from '@/components/revenue/PnlComparisonChart';
 import { TrendingUp, TrendingDown, Calendar, DollarSign } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatCurrency, formatPercent } from '@/utils/currencyUtils';
 
 type ComparisonType = 'previous' | 'year';
 
@@ -74,18 +75,6 @@ function getComparisonPeriods(daysBack: number, comparisonType: ComparisonType) 
   }
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatPercent(percent: number): string {
-  const sign = percent >= 0 ? '+' : '';
-  return `${sign}${percent.toFixed(1)}%`;
-}
 
 function getTrendIcon(percent: number) {
   return percent >= 0 ? (

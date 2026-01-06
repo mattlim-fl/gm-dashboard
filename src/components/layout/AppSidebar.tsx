@@ -18,7 +18,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { canViewFinancial, canManageTeam } from "@/lib/permissions";
+import { canViewFinancial, canManageTeam, isAdmin } from "@/lib/permissions";
 
 interface MenuItem {
   title: string;
@@ -137,21 +137,23 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        {/* Dashboard - Standalone */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip={dashboardItem.title}>
-                  <Link to={dashboardItem.url}>
-                    <dashboardItem.icon className="h-4 w-4" />
-                    <span>{dashboardItem.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Dashboard - Standalone - Only show for admins */}
+        {isAdmin(role) && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip={dashboardItem.title}>
+                    <Link to={dashboardItem.url}>
+                      <dashboardItem.icon className="h-4 w-4" />
+                      <span>{dashboardItem.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Finance Section - Only show if admin */}
         {canViewFinancial(role) && (

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DollarSign, TrendingUp, TrendingDown, Users, ShoppingBag, Shield, Calendar, UserCheck, Receipt } from "lucide-react";
 import { FinancialKPIs as KPIs } from "@/services/financialService";
+import { formatCurrency, formatPercent } from "@/utils/currencyUtils";
 
 interface FinancialKPIsProps {
   kpis: KPIs | null;
@@ -27,12 +28,6 @@ export function FinancialKPIs({ kpis, isLoading }: FinancialKPIsProps) {
       </div>
     );
   }
-
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
-
-  const formatPercent = (val: number) => 
-    `${val > 0 ? '+' : ''}${val.toFixed(1)}%`;
 
   // Format absolute change in percentage points for costs (always positive, arrow shows direction)
   const formatCostChange = (val: number) => 

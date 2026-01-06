@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Calendar as MiniCalendar } from "@/components/ui/calendar";
 import { Plus } from "lucide-react";
+import { toVenue, toBookingType } from "@/utils/typeGuards";
 
 type CalendarViewType = 'day' | 'week' | 'month';
 
@@ -193,8 +194,8 @@ export const CalendarView = () => {
             startTime: startTime.slice(0, 5),
             endTime: endTime.slice(0, 5),
             karaokeBoothId: resource?.type === 'karaoke' ? resourceId : undefined,
-            bookingType: bookingType as "venue_hire" | "karaoke_booking",
-            venue: venue as "manor" | "hippie",
+            bookingType: toBookingType(bookingType),
+            venue: toVenue(venue),
         });
         setIsCreateSidebarOpen(true);
     }

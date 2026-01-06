@@ -5,6 +5,7 @@ import { Eye, Edit } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { BookingRow } from "@/services/bookingService";
 import { BookingDetailsSidebar } from "@/components/bookings/BookingDetailsSidebar";
+import { formatVenue, formatBookingType, formatVenueArea, formatDuration } from "@/utils/formattingUtils";
 
 interface ScheduleTableProps {
   bookings: BookingRow[];
@@ -27,30 +28,7 @@ export const ScheduleTable = ({ bookings }: ScheduleTableProps) => {
     setSelectedBooking(null);
   };
 
-  const formatVenue = (venue: string) => {
-    return venue === 'manor' ? 'Manor' : 'Hippie Club';
-  };
-
-  const formatBookingType = (type: string) => {
-    return type === 'venue_hire' ? 'Venue Hire' : 'VIP Tickets';
-  };
-
-  const formatVenueArea = (area: string | null) => {
-    if (!area) return '';
-    return area.split('_').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
-  };
-
-  const formatDuration = (durationHours: number | null, startTime: string | null, endTime: string | null) => {
-    if (durationHours) {
-      return `${durationHours}h`;
-    }
-    if (startTime && endTime) {
-      return `${startTime} - ${endTime}`;
-    }
-    return 'All day';
-  };
+import { formatVenue, formatBookingType, formatVenueArea, formatDuration } from "@/utils/formattingUtils";
 
   if (bookings.length === 0) {
     return (

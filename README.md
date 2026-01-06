@@ -10,12 +10,14 @@ GM Admin is an **admin-only application** designed exclusively for venue staff a
 ### Key Features
 
 - **Centralized Dashboard**: Real-time metrics, today's schedule, and quick actions
-- **Booking Management**: Complete booking lifecycle for karaoke and venue hire
+- **Booking Management**: Complete booking lifecycle for karaoke, venue hire, and VIP tickets
+- **Occasions System**: Special event bookings with guest list management and capacity constraints
 - **Customer Database**: Centralized customer information and booking history
 - **Analytics & Reporting**: Revenue tracking, performance metrics, and trend analysis
+- **Financial Integration**: Square payment sync and Xero P&L integration
+- **Team Management**: Staff accounts with role-based access control (RBAC)
 - **Multi-Venue Support**: Scalable architecture for managing multiple venues
 - **Mobile Optimization**: Touch-friendly tools for venue floor management
-- **External Booking Widget**: Embeddable booking form for marketing websites
 
 ### Target Users
 
@@ -91,23 +93,38 @@ The application will be available at `http://localhost:8080` with hot-reload ena
 ```
 src/
 ├── components/          # Reusable UI components
-│   ├── revenue/         # Revenue analytics components
 │   ├── ui/             # Base UI components (shadcn/ui)
-│   └── layout/         # Layout components
+│   ├── layout/         # AppSidebar, navigation components
+│   ├── revenue/        # Revenue analytics components
+│   ├── occasions/      # Occasion management components
+│   └── auth/           # ProtectedRoute, AdminRoute
 ├── pages/              # Application pages/routes
+│   ├── Dashboard.tsx   # Main dashboard
+│   ├── Bookings.tsx    # Booking list and management
+│   ├── Occasions.tsx   # Special event bookings
+│   ├── Revenue.tsx     # Square payment analytics (admin)
+│   ├── ProfitAndLoss.tsx # Xero P&L integration (admin)
+│   ├── Team.tsx        # Staff management (admin)
+│   └── ...             # Other pages
+├── contexts/           # React contexts (Auth, Theme)
+├── services/           # Business logic and API calls
 ├── hooks/              # Custom React hooks
 ├── lib/                # Utility functions
 ├── types/              # TypeScript type definitions
 └── integrations/       # External service integrations (Supabase)
 
 supabase/
-├── functions/          # Edge functions for Square sync and booking API
-└── migrations/         # Database migrations
+├── functions/          # Edge functions (Deno)
+│   ├── karaoke-availability/
+│   ├── karaoke-book/
+│   ├── ticket-pay-and-book/
+│   ├── venue-config-api/
+│   ├── sync-and-transform/
+│   └── ...
+└── migrations/         # Database schema migrations
 
-widget-deploy/          # Standalone booking widget for external sites
-├── gm-booking-widget-standalone.js
-├── widget.css
-└── widget-loader.js
+public/
+└── widget/             # Standalone booking widget files
 
 docs/
 ├── product/            # Product documentation and PRDs
@@ -116,57 +133,74 @@ docs/
 └── user-guides/        # User manuals and guides
 ```
 
-## Square Integration Architecture
+## Core Features
 
-The system uses a simplified Square API integration:
+### Booking Types
 
-1. **Backend Sync**: `square-sync` function fetches payments and locations from Square
-2. **Data Storage**: Revenue data is stored in `revenue_events` table
-3. **Frontend**: Unified revenue page displays analytics with monthly/weekly/yearly views
-4. **Scheduled Updates**: Automatic sync via `square-cron` function
+The system supports multiple booking types:
 
-### Data Flow
-```
-Square API → square-sync function → revenue_events table → Revenue Analytics Page
-```
+1. **Venue Hire** - Full venue or area rentals (upstairs, downstairs, full venue)
+2. **Karaoke Bookings** - Time-based booth reservations with availability checking
+3. **VIP Tickets** - Event entry tickets with check-in tracking
+4. **Occasions** - Special event bookings with:
+   - Guest list management
+   - Capacity constraints
+   - Shared booking links for guest purchases
+   - Organizer and guest tracking
 
-## External Booking Widget
+### Square Integration
 
-The platform includes an embeddable booking widget for marketing websites:
+The system integrates with Square for payment processing and revenue tracking:
 
-- **Widget URL**: `https://booking-widget.getproductbox.com`
-- **API Endpoint**: `https://plksvatjdylpuhjitbfc.supabase.co/functions/v1/public-booking-api`
-- **Supported Booking Types**: Venue hire and VIP tickets
-- **Pre-configuration**: Supports venue and booking type pre-selection
+1. **Payment Sync**: `sync-and-transform` function fetches payments from Square API
+2. **Data Storage**: Revenue data stored in `revenue_events` table
+3. **Analytics**: Revenue page displays trends with monthly/weekly/yearly views
+4. **Scheduled Updates**: Automatic sync via `sync-scheduler` function
+5. **Backfill**: Historical data import via `square-sync-backfill`
 
-### Widget Integration
-```html
-<script src="https://booking-widget.getproductbox.com/widget-loader.js"></script>
-<script>
-  window.GMBookingWidget.init({
-    preConfig: {
-      venue: 'manor',
-      bookingType: 'vip_tickets'
-    }
-  });
-</script>
-```
+### Xero Integration
+
+Profit & Loss data is synced from Xero:
+
+1. **OAuth Connection**: Stored in `xero_connections` table
+2. **P&L Snapshots**: Cached in `xero_pnl_snapshots` table
+3. **Manual Refresh**: Available in P&L page for admins
+
+### RBAC (Role-Based Access Control)
+
+Two-tier permission system:
+
+- **Staff Role**: Can manage bookings, customers, and daily operations
+- **Admin Role**: Full access including revenue, P&L, team management, and settings
+- **Email Whitelist**: `allowed_emails` table controls who can create accounts
+- **RLS Policies**: Database-level security enforces access control
 
 ## Deployment
 
 ### Production Deployment
-The application is deployed using PowerShell scripts for automated deployment:
 
-```powershell
-# Deploy to production
-.\scripts\deploy.ps1
+The application is deployed to Netlify with automatic deployments from the main branch:
+
+- **Frontend URL**: `https://gm-dashboard.getproductbox.com`
+- **Deployment**: Automatic via Netlify (connected to Git repository)
+- **Build Command**: `npm run build`
+- **Publish Directory**: `dist/`
+
+### Edge Functions Deployment
+
+Supabase Edge Functions are deployed separately:
+
+```bash
+# Deploy all functions
+supabase functions deploy
+
+# Deploy specific function
+supabase functions deploy karaoke-availability
 ```
 
-### Widget Deployment
-The booking widget is hosted on Netlify at `booking-widget.getproductbox.com` and can be updated by replacing files in the `widget-deploy/` directory.
+### Widget Files
 
-### Custom Domain
-The application is hosted at `gm-dashboard.getproductbox.com` with custom domain configuration.
+The booking widget files are located in `public/widget/` and are served as static assets.
 
 ## Success Metrics
 
@@ -184,10 +218,12 @@ The application is hosted at `gm-dashboard.getproductbox.com` with custom domain
 
 ## Support & Documentation
 
+- **Development Guidelines**: See `.cursor/rules/gm-dashboard.mdc`
 - **Product Requirements**: See `docs/product/prd/main-product-prd.md`
-- **API Documentation**: See `docs/technical/`
-- **User Guides**: Available in `docs/user-guides/`
-- **Technical Specs**: See `docs/technical/`
+- **API Documentation**: See `docs/api-documentation.md`
+- **Architecture**: See `docs/technical/architecture-overview.md`
+- **RLS Policies**: See `docs/RLS_POLICIES.md`
+- **Refactor History**: See `REFACTOR_SUMMARY.md`
 
 ## Contributing
 
@@ -196,4 +232,3 @@ This is an internal GM project. For development questions or feature requests, p
 ---
 
 **Production URL**: https://gm-dashboard.getproductbox.com
-**Widget URL**: https://booking-widget.getproductbox.com

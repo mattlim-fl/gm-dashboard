@@ -8,6 +8,9 @@ import { ChevronDown, ChevronUp, Loader2, CheckCircle, Clock, XCircle } from "lu
 import { BookingRow } from "@/services/bookingService";
 import { useUpdateBookingStatus } from "@/hooks/useBookings";
 import { BookingDetailsSidebar } from "./BookingDetailsSidebar";
+import { formatCurrency } from "@/utils/currencyUtils";
+import { formatDateUK } from "@/utils/dateUtils";
+import { formatVenue, formatBookingType, formatVenueArea } from "@/utils/formattingUtils";
 
 interface BookingsTableProps {
   bookings: BookingRow[];
@@ -27,45 +30,6 @@ export const BookingsTable = ({
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const updateStatusMutation = useUpdateBookingStatus();
-
-  const formatCurrency = (amount: number | null) => {
-    if (!amount) return '-';
-    // Convert from GST inclusive to GST exclusive by dividing by 1.1
-    const gstExclusiveAmount = amount / 1.1;
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD'
-    }).format(gstExclusiveAmount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
-
-  const formatVenue = (venue: string) => {
-    return venue === 'manor' ? 'Manor' : 'Hippie Club';
-  };
-
-  const formatBookingType = (type: string, venueArea?: string | null) => {
-    if (type === 'karaoke_booking') {
-      return 'Karaoke Booking';
-    }
-    if (type === 'venue_hire' && venueArea === 'karaoke') {
-      return 'Karaoke Booking'; // Fallback for any remaining old records
-    }
-    return type === 'venue_hire' ? 'Venue Hire' : 'VIP Tickets';
-  };
-
-  const formatVenueArea = (area: string | null) => {
-    if (!area) return '';
-    return area.split('_').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
-  };
 
   const getSortIcon = (field: keyof BookingRow) => {
     if (sortField !== field) return null;
@@ -234,7 +198,7 @@ export const BookingsTable = ({
                   )}
                 </div>
               </TableCell>
-              <TableCell>{formatDate(booking.booking_date)}</TableCell>
+              <TableCell>{formatDateUK(booking.booking_date)}</TableCell>
               <TableCell>
                 {booking.start_time ? (
                   <div>
@@ -277,7 +241,7 @@ export const BookingsTable = ({
                   </Select>
                 </div>
               </TableCell>
-              <TableCell className="font-medium">{formatCurrency(booking.total_amount)}</TableCell>
+              <TableCell className="font-medium">{formatCurrency(booking.total_amount, { excludeGST: true, currency: 'AUD' })}</TableCell>
             </TableRow>
           ))}
         </TableBody>

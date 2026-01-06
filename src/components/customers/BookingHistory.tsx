@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Calendar, ExternalLink, Clock, Users, Ticket, DollarSign, MapPin, FileText } from "lucide-react";
-import { format } from "date-fns";
 import { BookingRow } from "@/services/bookingService";
+import { formatCurrency } from "@/utils/currencyUtils";
+import { formatDateCompact, formatDateFull, formatTime } from "@/utils/dateUtils";
+import { getStatusColor, formatBookingTypeSimple } from "@/utils/formattingUtils";
 
 interface BookingHistoryProps {
   bookings: BookingRow[];
@@ -13,46 +15,6 @@ interface BookingHistoryProps {
 }
 
 export const BookingHistory = ({ bookings = [], onViewAll }: BookingHistoryProps) => {
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'dd/MM');
-  };
-
-  const formatDateFull = (dateString: string) => {
-    return format(new Date(dateString), 'EEEE, MMMM d, yyyy');
-  };
-
-  const formatTime = (timeString: string | null) => {
-    if (!timeString) return null;
-    // Assuming time is in HH:mm format
-    return timeString;
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD'
-    }).format(amount);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'confirmed':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'no-show':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      default:
-        return 'bg-gm-neutral-100 text-gm-neutral-800 dark:bg-gm-neutral-800 dark:text-gm-neutral-200';
-    }
-  };
-
-  const formatBookingType = (type: string | null) => {
-    if (!type) return 'N/A';
-    return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
 
   // Sort bookings by date (most recent first)
   const sortedBookings = [...bookings].sort((a, b) => {
@@ -96,7 +58,7 @@ export const BookingHistory = ({ bookings = [], onViewAll }: BookingHistoryProps
                           {formatDateFull(booking.booking_date)}
                         </div>
                         <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
-                          <span>{formatBookingType(booking.booking_type)}</span>
+                          <span>{formatBookingTypeSimple(booking.booking_type)}</span>
                           {booking.venue && (
                             <>
                               <span>•</span>
@@ -109,7 +71,7 @@ export const BookingHistory = ({ bookings = [], onViewAll }: BookingHistoryProps
                     <div className="flex items-center gap-3 flex-shrink-0">
                       {booking.total_amount && (
                         <div className="text-sm font-medium">
-                          {formatCurrency(booking.total_amount)}
+                          {formatCurrency(booking.total_amount, { currency: 'AUD' })}
                         </div>
                       )}
                       <Badge className={`${getStatusColor(booking.status || 'pending')} text-xs`}>
