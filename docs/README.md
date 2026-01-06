@@ -1,64 +1,83 @@
+# Documentation
 
-# Project Documentation
+## Quick Start
 
-This directory contains all product documentation for the application. The structure is designed to be scalable and maintainable for the development team.
+**New to project?**
+1. `/README.md` - Setup and overview
+2. `.cursor/rules/gm-dashboard.mdc` - Development guidelines
+3. `docs/technical/architecture-overview.md` - System architecture
+
+**Building features?**
+1. `docs/IMPLEMENTATION_STATUS.md` - What's done/planned
+2. `docs/edge-functions.md` - API reference
+3. `docs/features/` - Feature-specific docs
+
+## Essential Documentation
+
+### Core Technical
+- **`.cursor/rules/gm-dashboard.mdc`** ⭐ - AI coding guidelines, conventions, patterns
+- **`technical/architecture-overview.md`** ⭐ - Complete system architecture, DB schema, data flows
+- **`edge-functions.md`** ⭐ - All edge function APIs with examples
+- **`RLS_POLICIES.md`** ⭐ - Database security policies
+
+### Features
+- **`features/occasions-system.md`** - Occasions with capacity management
+- **`features/rbac-system.md`** - Role-based access control
+- **`capacity-constraints.md`** - Capacity implementation details
+
+### Product & Planning
+- **`product/prd/main-product-prd.md`** - Product requirements
+- **`IMPLEMENTATION_STATUS.md`** - Feature status and roadmap
+- **`qr-tickets-branch-1-plan.md`** - QR implementation plan
 
 ## Directory Structure
 
 ```
 docs/
-├── README.md                 # This file - documentation overview
-├── product/                  # Product-related documentation
-│   ├── prd/                 # Product Requirements Documents
-│   ├── roadmap/             # Product roadmap and planning
-│   └── user-stories/        # User stories and acceptance criteria
-├── design/                   # Design specifications and guidelines
-│   ├── ui-specs/            # UI/UX specifications
-│   ├── style-guide/         # Design system and style guide
-│   └── wireframes/          # Wireframes and mockups
-├── technical/                # Technical documentation
-│   ├── api/                 # API documentation
-│   ├── architecture/        # System architecture docs
-│   └── deployment/          # Deployment guides and configs
-├── user-guides/             # End-user documentation
-│   ├── tutorials/           # Step-by-step tutorials
-│   ├── faq/                 # Frequently asked questions
-│   └── troubleshooting/     # Common issues and solutions
-└── templates/               # Document templates for consistency
+├── README.md (this file)
+├── IMPLEMENTATION_STATUS.md     # Feature tracking
+├── edge-functions.md            # API reference
+├── RLS_POLICIES.md              # Security policies
+├── technical/
+│   ├── architecture-overview.md # System architecture ⭐
+│   ├── allowed-origins.md
+│   └── README.md
+├── features/
+│   ├── occasions-system.md      # Occasions feature ⭐
+│   ├── rbac-system.md           # Access control ⭐
+│   └── README.md
+├── product/prd/
+│   └── main-product-prd.md      # Product requirements
+├── capacity-constraints.md
+├── capacity-constraints-test-plan.md
+├── widget-integration.md
+├── qr-tickets-branch-*.md       # QR implementation plans
+└── archive/                     # Historical/deprecated docs
 ```
 
-## Document Types
+## Documentation by Task
 
-### Product Documentation (`product/`)
-- **PRD**: Product Requirements Documents defining features and specifications
-- **Roadmap**: Product planning and milestone tracking
-- **User Stories**: Detailed user requirements and acceptance criteria
-
-### Design Documentation (`design/`)
-- **UI Specs**: Detailed interface specifications
-- **Style Guide**: Design system, colors, typography, components
-- **Wireframes**: Visual mockups and prototypes
-
-### Technical Documentation (`technical/`)
-- **API**: REST/GraphQL endpoint documentation
-- **Architecture**: System design and component relationships
-- **Deployment**: Environment setup and deployment procedures
-
-### User Documentation (`user-guides/`)
-- **Tutorials**: How-to guides for end users
-- **FAQ**: Common questions and answers
-- **Troubleshooting**: Problem resolution guides
-
-## Contributing to Documentation
-
-1. Use the templates provided in `templates/` for consistency
-2. Follow the naming convention: `kebab-case-file-names.md`
-3. Include a table of contents for longer documents
-4. Keep documents up-to-date with code changes
-5. Review documentation during code reviews
+**Understand system:** `technical/architecture-overview.md`
+**Create edge function:** `edge-functions.md` + `.cursor/rules/gm-dashboard.mdc`
+**Work with database:** `technical/architecture-overview.md` (schema) + `RLS_POLICIES.md`
+**Implement security:** `features/rbac-system.md` + `RLS_POLICIES.md`
+**Work with occasions:** `features/occasions-system.md`
+**Deploy:** `/README.md` (deployment section)
 
 ## Maintenance
 
-- Review and update documentation quarterly
-- Archive outdated documents to `archive/` subdirectories
-- Ensure all documentation follows the established templates
+**Always update docs when:**
+- Adding features
+- Changing DB schema
+- Modifying edge functions
+- Changing security/RLS policies
+
+**Priority:**
+1. **Critical:** Architecture, edge functions, RLS, RBAC, main README
+2. **Important:** Feature docs, implementation guides
+3. **Nice to have:** Planning docs, templates
+
+## Deprecated
+
+- **`api-documentation.md`** - Use `edge-functions.md` instead
+- **`archive/`** - Historical/one-time docs
