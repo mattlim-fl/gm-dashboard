@@ -58,7 +58,7 @@ interface NotificationSettings {
 // Constants
 const NOTIFICATION_TYPE = 'weekly_summary'
 const EMAIL_TEMPLATE = 'weekly-summary'
-const DASHBOARD_URL = 'https://gm-dashboard.netlify.app'
+const DASHBOARD_URL = 'https://gm-dashboard.getproductbox.com'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
