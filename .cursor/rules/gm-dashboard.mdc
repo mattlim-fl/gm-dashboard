@@ -408,6 +408,13 @@ const mutation = useMutation({
 5. **Check migrations** - Ensure migrations are idempotent and reversible
 6. **Invalidate queries** - Clear TanStack Query cache after mutations
 
+## Documentation Guidelines
+
+- **Be concise** - Update existing docs rather than creating new ones
+- **Avoid verbosity** - Keep setup guides under 100 lines when possible
+- **No redundancy** - Don't create multiple docs covering the same topic
+- **Practical focus** - Include only essential setup steps and troubleshooting
+
 ## Getting Help
 
 - Check existing documentation in `/docs/`

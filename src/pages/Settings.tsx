@@ -1,11 +1,41 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SystemSettings } from '@/components/settings/SystemSettings';
 import { ApiSettings } from '@/components/settings/ApiSettings';
 import { BenchmarkSettings } from '@/components/settings/BenchmarkSettings';
+import { NotificationSettings } from '@/components/settings/NotificationSettings';
+
+const VALID_TABS = ['integrations', 'notifications', 'benchmarks', 'system'] as const;
+type TabValue = typeof VALID_TABS[number];
 
 export default function Settings() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  
+  // Get tab from URL or default to 'integrations'
+  const tabFromUrl = searchParams.get('tab') as TabValue | null;
+  const activeTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) 
+    ? tabFromUrl 
+    : 'integrations';
+
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('tab', value);
+    navigate(`/settings?${newSearchParams.toString()}`, { replace: true });
+  };
+
+  // Ensure URL has tab parameter on initial load if missing
+  useEffect(() => {
+    if (!searchParams.get('tab')) {
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('tab', 'integrations');
+      navigate(`/settings?${newSearchParams.toString()}`, { replace: true });
+    }
+  }, [searchParams, navigate]);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -16,15 +46,20 @@ export default function Settings() {
           </p>
         </div>
 
-        <Tabs defaultValue="integrations" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="integrations">API Integrations</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
             <TabsTrigger value="system">System Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="integrations" className="mt-6">
             <ApiSettings />
+          </TabsContent>
+
+          <TabsContent value="notifications" className="mt-6">
+            <NotificationSettings />
           </TabsContent>
 
           <TabsContent value="benchmarks" className="mt-6">

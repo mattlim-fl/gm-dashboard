@@ -14,7 +14,6 @@ import Dashboard from "./pages/Dashboard";
 import Calendar from "./pages/Calendar";
 import Bookings from "./pages/Bookings";
 import CreateBooking from "./pages/CreateBooking";
-import DesignSystem from "./pages/DesignSystem";
 import NotFound from "./pages/NotFound";
 import RunSheet from "./pages/RunSheet";
 import Customers from "./pages/Customers";
@@ -83,11 +82,6 @@ const App = () => (
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <Settings />
-                </ProtectedRoute>
-              } />
-              <Route path="/design" element={
-                <ProtectedRoute>
-                  <DesignSystem />
                 </ProtectedRoute>
               } />
               <Route path="/booth-management" element={
