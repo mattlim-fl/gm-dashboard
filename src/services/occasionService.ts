@@ -46,6 +46,9 @@ export interface UpdateOccasionInput {
 
 export interface OccasionWithStats extends Occasion {
   occasion_date?: string; // Mapped from booking_date for component compatibility
+  organiser_name?: string | null; // Mapped from customer_name for component compatibility
+  organiser_email?: string | null; // Mapped from customer_email for component compatibility
+  organiser_phone?: string | null; // Mapped from customer_phone for component compatibility
   total_bookings: number;
   total_guests: number;
   remaining_capacity: number;
@@ -213,6 +216,10 @@ export const occasionService = {
         ...occasion,
         occasion_name: occasion.occasion_name || '',
         occasion_date: occasion.booking_date, // Map booking_date to occasion_date for component compatibility
+        organiser_name: occasion.customer_name, // Map customer_name to organiser_name for component compatibility
+        organiser_email: occasion.customer_email, // Map customer_email to organiser_email for component compatibility
+        organiser_phone: occasion.customer_phone, // Map customer_phone to organiser_phone for component compatibility
+        notes: (occasion as any).staff_notes || null, // Map staff_notes to notes for component compatibility
         total_bookings: stats.total_bookings,
         total_guests: stats.total_guests,
         remaining_capacity: (occasion.capacity || 0) - stats.total_guests,
@@ -250,6 +257,10 @@ export const occasionService = {
       ...occasion,
       occasion_name: occasion.occasion_name || '',
       occasion_date: occasion.booking_date, // Map booking_date to occasion_date for component compatibility
+      organiser_name: occasion.customer_name, // Map customer_name to organiser_name for component compatibility
+      organiser_email: occasion.customer_email, // Map customer_email to organiser_email for component compatibility
+      organiser_phone: occasion.customer_phone, // Map customer_phone to organiser_phone for component compatibility
+      notes: (occasion as any).staff_notes || null, // Map staff_notes to notes for component compatibility
       total_bookings,
       total_guests,
       remaining_capacity: (occasion.capacity || 0) - total_guests,
