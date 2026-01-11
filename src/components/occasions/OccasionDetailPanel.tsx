@@ -96,6 +96,13 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
         }
       });
       
+      // Sort guests to ensure organiser is always at the top
+      guests.sort((a, b) => {
+        if (a.isOrganiser && !b.isOrganiser) return -1
+        if (!a.isOrganiser && b.isOrganiser) return 1
+        return 0
+      });
+      
       setAllGuests(guests);
       
       // Initialize editing state with current names
