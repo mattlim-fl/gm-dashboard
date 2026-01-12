@@ -359,7 +359,7 @@ CRITICAL: Return ONLY the HTML code with NO markdown code blocks, NO explanation
 Structure the email as:
 
 1. **Header Section**: 
-   - Title: "Weekly Venue Performance Report" (large, bold, light color)
+   - Title: "Weekly Venue Performance Report" (large, bold, black color)
    - Date range subtitle (${data.period.start} - ${data.period.end})
 
 2. **Executive Summary** (2-3 sentences with the most critical insights)
@@ -384,7 +384,7 @@ Structure the email as:
 **Styling Guidelines - GM Dashboard Brand:**
 - **Background**: #0f172a (dark navy) for body, #1e293b (lighter navy) for cards/containers
 - **Text Colors**: 
-  - Section Headers (Executive Summary, Key Metrics, etc.): #f1f5f9 (bright white, bold, large)
+  - Section Headers (Executive Summary, Key Metrics, etc.): #000000 (black, bold, large)
   - Body text: #cbd5e1 (light gray)
   - Secondary text: #94a3b8 (muted gray)
 - **Table Styling**: 
@@ -396,7 +396,7 @@ Structure the email as:
   - Positive: #22c55e (green)
   - Negative: #ef4444 (red)  
   - Neutral: #94a3b8 (gray)
-- **CTA Button**: Gradient from #f97316 to #fb923c (orange gradient), white text, rounded corners
+- **CTA Button**: Gradient from #f97316 to #fb923c (orange gradient), #ffffff (white) text color, rounded corners
 - **Primary Accent**: #f97316 (GM Orange) for the CTA button only
 - **Typography**: Use system fonts (-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto)
 - Mobile-responsive design
