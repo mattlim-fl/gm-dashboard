@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Calendar, Image, Archive, ArchiveRestore, Trash2, Eye, Plus } from 'lucide-react';
+import { Calendar, Image, Trash2, Eye, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ArchiveButton } from '@/components/ui/archive-button';
 import {
   Table,
   TableBody,
@@ -147,25 +149,12 @@ export function AlbumList({ venue, onSelectAlbum }: AlbumListProps) {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {album.archived ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleUnarchive(album.id)}
-                          disabled={unarchiveAlbum.isPending}
-                        >
-                          <ArchiveRestore className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleArchive(album.id)}
-                          disabled={archiveAlbum.isPending}
-                        >
-                          <Archive className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <ArchiveButton
+                        archived={album.archived}
+                        onArchive={() => handleArchive(album.id)}
+                        onUnarchive={() => handleUnarchive(album.id)}
+                        disabled={archiveAlbum.isPending || unarchiveAlbum.isPending}
+                      />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="ghost" size="sm">
@@ -198,16 +187,15 @@ export function AlbumList({ venue, onSelectAlbum }: AlbumListProps) {
             </TableBody>
           </Table>
         ) : (
-          <div className="text-center py-12">
-            <Image className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground mb-4">
-              No photo albums yet
-            </p>
-            <Button onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create First Album
-            </Button>
-          </div>
+          <EmptyState
+            icon={Image}
+            title="No photo albums yet"
+            action={{
+              label: 'Create First Album',
+              onClick: () => setCreateDialogOpen(true),
+              icon: Plus,
+            }}
+          />
         )}
       </CardContent>
 

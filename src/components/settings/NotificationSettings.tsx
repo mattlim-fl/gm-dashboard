@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Plus, X, Send, Eye, Clock } from 'lucide-react';
+import { formatHour, formatSchedule } from '@/utils/dateUtils';
 
 interface NotificationSettings {
   id: string;
@@ -23,22 +24,6 @@ interface NotificationSettings {
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function formatSchedule(dayOfWeek: number | null, hourAwst: number | null): string {
-  if (dayOfWeek === null || hourAwst === null) {
-    return 'Not scheduled';
-  }
-  const day = DAY_NAMES[dayOfWeek] || 'Unknown';
-  const hour = hourAwst === 0 ? '12:00 AM' : hourAwst < 12 ? `${hourAwst}:00 AM` : hourAwst === 12 ? '12:00 PM' : `${hourAwst - 12}:00 PM`;
-  return `${day} at ${hour} AWST`;
-}
-
-function formatHour(hour: number): string {
-  if (hour === 0) return '12:00 AM';
-  if (hour < 12) return `${hour}:00 AM`;
-  if (hour === 12) return '12:00 PM';
-  return `${hour - 12}:00 PM`;
-}
 
 interface NotificationCardProps {
   settings: NotificationSettings;
@@ -283,7 +268,7 @@ function NotificationCard({
                 {email}
                 <button
                   onClick={() => removeEmail(email)}
-                  className="ml-2 hover:text-red-600"
+                  className="ml-2 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -326,7 +311,7 @@ function NotificationCard({
                 {phone}
                 <button
                   onClick={() => removePhone(phone)}
-                  className="ml-2 hover:text-red-600"
+                  className="ml-2 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
                 </button>

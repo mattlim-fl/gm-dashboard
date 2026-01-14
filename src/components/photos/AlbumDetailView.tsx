@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { PhotoAlbum, PhotoAlbumImage } from '@/services/photoService';
 import {
   useAlbumPhotos,
@@ -193,16 +194,15 @@ export function AlbumDetailView({ album, onBack }: AlbumDetailViewProps) {
             </DndContext>
           </>
         ) : (
-          <div className="text-center py-12">
-            <Image className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground mb-4">
-              No photos in this album yet
-            </p>
-            <Button onClick={() => setShowUploader(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Photos
-            </Button>
-          </div>
+          <EmptyState
+            icon={Image}
+            title="No photos in this album yet"
+            action={{
+              label: 'Upload Photos',
+              onClick: () => setShowUploader(true),
+              icon: Upload,
+            }}
+          />
         )}
       </CardContent>
 

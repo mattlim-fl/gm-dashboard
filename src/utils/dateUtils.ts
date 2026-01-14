@@ -78,4 +78,29 @@ export function formatTime(timeString: string | null | undefined): string | null
   if (!timeString) return null;
   // Assuming time is in HH:mm format
   return timeString;
+}
+
+/**
+ * Formats an hour (0-23) to 12-hour format with AM/PM
+ * Used for scheduling and time display
+ */
+export function formatHour(hour: number): string {
+  if (hour === 0) return '12:00 AM';
+  if (hour < 12) return `${hour}:00 AM`;
+  if (hour === 12) return '12:00 PM';
+  return `${hour - 12}:00 PM`;
+}
+
+/**
+ * Formats a schedule with day of week and hour in AWST
+ * Returns a human-readable schedule string
+ */
+export function formatSchedule(dayOfWeek: number | null, hourAwst: number | null): string {
+  if (dayOfWeek === null || hourAwst === null) {
+    return 'Not scheduled';
+  }
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const day = dayNames[dayOfWeek] || 'Unknown';
+  const hour = formatHour(hourAwst);
+  return `${day} at ${hour} AWST`;
 } 

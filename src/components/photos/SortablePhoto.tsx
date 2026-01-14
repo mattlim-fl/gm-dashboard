@@ -1,7 +1,8 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { GripVertical, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ArchiveButton } from '@/components/ui/archive-button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,33 +86,16 @@ export function SortablePhoto({
       {/* Action buttons overlay */}
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors pointer-events-none">
         <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 pointer-events-auto">
-          {photo.archived ? (
-            <Button
+          <div onClick={(e) => e.stopPropagation()}>
+            <ArchiveButton
+              archived={photo.archived}
+              onArchive={onArchive}
+              onUnarchive={onUnarchive}
+              disabled={isArchiving}
               variant="secondary"
               size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnarchive();
-              }}
-              disabled={isArchiving}
-            >
-              <ArchiveRestore className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchive();
-              }}
-              disabled={isArchiving}
-            >
-              <Archive className="h-4 w-4" />
-            </Button>
-          )}
+            />
+          </div>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
