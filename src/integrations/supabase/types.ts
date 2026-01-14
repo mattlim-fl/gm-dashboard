@@ -44,6 +44,7 @@ export type Database = {
           created_at: string | null
           guest_name: string
           id: string
+          is_organiser: boolean
           updated_at: string | null
         }
         Insert: {
@@ -51,6 +52,7 @@ export type Database = {
           created_at?: string | null
           guest_name: string
           id?: string
+          is_organiser?: boolean
           updated_at?: string | null
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           created_at?: string | null
           guest_name?: string
           id?: string
+          is_organiser?: boolean
           updated_at?: string | null
         }
         Relationships: [
@@ -75,6 +78,7 @@ export type Database = {
           booking_date: string
           booking_source: string | null
           booking_type: string
+          capacity: number | null
           created_at: string | null
           created_by: string | null
           customer_email: string | null
@@ -85,18 +89,25 @@ export type Database = {
           export_date: string | null
           exported_to_megatix: boolean | null
           guest_count: number | null
+          guest_list_token: string | null
           id: string
+          is_occasion_organiser: boolean | null
           karaoke_booth_id: string | null
+          occasion_name: string | null
+          organiser_token: string | null
+          parent_booking_id: string | null
           payment_attempted_at: string | null
           payment_completed_at: string | null
           payment_status: string | null
           reference_code: string | null
+          share_token: string | null
           special_requests: string | null
           square_payment_id: string | null
           staff_notes: string | null
           start_time: string | null
           status: string
           ticket_checkins: Json | null
+          ticket_price_cents: number | null
           ticket_quantity: number | null
           total_amount: number | null
           updated_at: string | null
@@ -107,6 +118,7 @@ export type Database = {
           booking_date: string
           booking_source?: string | null
           booking_type: string
+          capacity?: number | null
           created_at?: string | null
           created_by?: string | null
           customer_email?: string | null
@@ -117,18 +129,25 @@ export type Database = {
           export_date?: string | null
           exported_to_megatix?: boolean | null
           guest_count?: number | null
+          guest_list_token?: string | null
           id?: string
+          is_occasion_organiser?: boolean | null
           karaoke_booth_id?: string | null
+          occasion_name?: string | null
+          organiser_token?: string | null
+          parent_booking_id?: string | null
           payment_attempted_at?: string | null
           payment_completed_at?: string | null
           payment_status?: string | null
           reference_code?: string | null
+          share_token?: string | null
           special_requests?: string | null
           square_payment_id?: string | null
           staff_notes?: string | null
           start_time?: string | null
           status?: string
           ticket_checkins?: Json | null
+          ticket_price_cents?: number | null
           ticket_quantity?: number | null
           total_amount?: number | null
           updated_at?: string | null
@@ -139,6 +158,7 @@ export type Database = {
           booking_date?: string
           booking_source?: string | null
           booking_type?: string
+          capacity?: number | null
           created_at?: string | null
           created_by?: string | null
           customer_email?: string | null
@@ -149,18 +169,25 @@ export type Database = {
           export_date?: string | null
           exported_to_megatix?: boolean | null
           guest_count?: number | null
+          guest_list_token?: string | null
           id?: string
+          is_occasion_organiser?: boolean | null
           karaoke_booth_id?: string | null
+          occasion_name?: string | null
+          organiser_token?: string | null
+          parent_booking_id?: string | null
           payment_attempted_at?: string | null
           payment_completed_at?: string | null
           payment_status?: string | null
           reference_code?: string | null
+          share_token?: string | null
           special_requests?: string | null
           square_payment_id?: string | null
           staff_notes?: string | null
           start_time?: string | null
           status?: string
           ticket_checkins?: Json | null
+          ticket_price_cents?: number | null
           ticket_quantity?: number | null
           total_amount?: number | null
           updated_at?: string | null
@@ -175,7 +202,38 @@ export type Database = {
             referencedRelation: "karaoke_booths"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "bookings_parent_booking_id_fkey"
+            columns: ["parent_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      cost_benchmarks: {
+        Row: {
+          benchmark_percent: number
+          category: string
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          benchmark_percent?: number
+          category: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          benchmark_percent?: number
+          category?: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       customers: {
         Row: {
@@ -383,6 +441,84 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_logs: {
+        Row: {
+          created_at: string
+          delivery_method: string
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          notification_type: string
+          recipient: string
+          sent_at: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_method: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          notification_type: string
+          recipient: string
+          sent_at?: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          delivery_method?: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          notification_type?: string
+          recipient?: string
+          sent_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          created_at: string
+          cron_job_name: string | null
+          enabled: boolean
+          id: string
+          last_sent_at: string | null
+          notification_type: string
+          recipient_emails: string[]
+          schedule_day_of_week: number | null
+          schedule_hour_awst: number | null
+          updated_at: string
+          whatsapp_numbers: string[]
+        }
+        Insert: {
+          created_at?: string
+          cron_job_name?: string | null
+          enabled?: boolean
+          id?: string
+          last_sent_at?: string | null
+          notification_type: string
+          recipient_emails?: string[]
+          schedule_day_of_week?: number | null
+          schedule_hour_awst?: number | null
+          updated_at?: string
+          whatsapp_numbers?: string[]
+        }
+        Update: {
+          created_at?: string
+          cron_job_name?: string | null
+          enabled?: boolean
+          id?: string
+          last_sent_at?: string | null
+          notification_type?: string
+          recipient_emails?: string[]
+          schedule_day_of_week?: number | null
+          schedule_hour_awst?: number | null
+          updated_at?: string
+          whatsapp_numbers?: string[]
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           door_ticket_qty: number | null
@@ -422,6 +558,68 @@ export type Database = {
           synced_at?: string | null
           total_money_cents?: number | null
           venue?: string | null
+        }
+        Relationships: []
+      }
+      photo_album_images: {
+        Row: {
+          album_id: string
+          archived: boolean
+          created_at: string | null
+          display_order: number
+          id: string
+          storage_path: string
+        }
+        Insert: {
+          album_id: string
+          archived?: boolean
+          created_at?: string | null
+          display_order?: number
+          id?: string
+          storage_path: string
+        }
+        Update: {
+          album_id?: string
+          archived?: boolean
+          created_at?: string | null
+          display_order?: number
+          id?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_album_images_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "photo_albums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_albums: {
+        Row: {
+          archived: boolean
+          created_at: string | null
+          event_date: string
+          id: string
+          updated_at: string | null
+          venue: string
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string | null
+          event_date: string
+          id?: string
+          updated_at?: string | null
+          venue: string
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string | null
+          event_date?: string
+          id?: string
+          updated_at?: string | null
+          venue?: string
         }
         Relationships: []
       }
@@ -761,7 +959,7 @@ export type Database = {
     }
     Functions: {
       _upsert_revenue_event: { Args: { p_raw: Json }; Returns: undefined }
-      add_missing_locations_from_payments: { Args: never; Returns: Json }
+      add_missing_locations_from_payments: { Args: Record<PropertyKey, never>; Returns: Json }
       get_attendance_sum: {
         Args: { end_date: string; start_date: string; venue_filter?: string }
         Returns: number
@@ -782,7 +980,7 @@ export type Database = {
         }[]
       }
       get_available_weeks: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           week_label: string
           week_start: string
@@ -795,9 +993,13 @@ export type Database = {
       get_booking_guests: {
         Args: { p_booking_id: string; p_token?: string }
         Returns: {
-          guests: string[]
+          guests: Json
           max_guests: number
         }[]
+      }
+      get_cron_expression: {
+        Args: { day_of_week: number; hour_awst: number }
+        Returns: string
       }
       get_door_revenue_sum: {
         Args: { end_date: string; start_date: string; venue_filter?: string }
@@ -870,7 +1072,7 @@ export type Database = {
           year_start: string
         }[]
       }
-      karaoke_expire_due_holds: { Args: never; Returns: number }
+      karaoke_expire_due_holds: { Args: Record<PropertyKey, never>; Returns: number }
       process_payments_batch: {
         Args: { days_back?: number; payment_ids?: string[] }
         Returns: {
@@ -880,11 +1082,11 @@ export type Database = {
         }[]
       }
       reprocess_venues_batch: { Args: { days_back?: number }; Returns: Json }
-      reset_stuck_sync_states: { Args: never; Returns: undefined }
-      sync_square_locations: { Args: never; Returns: Json }
-      test_map_100_transactions: { Args: never; Returns: Json }
-      test_map_1000_transactions: { Args: never; Returns: Json }
-      test_map_all_transactions: { Args: never; Returns: Json }
+      reset_stuck_sync_states: { Args: Record<PropertyKey, never>; Returns: undefined }
+      sync_square_locations: { Args: Record<PropertyKey, never>; Returns: Json }
+      test_map_100_transactions: { Args: Record<PropertyKey, never>; Returns: Json }
+      test_map_1000_transactions: { Args: Record<PropertyKey, never>; Returns: Json }
+      test_map_all_transactions: { Args: Record<PropertyKey, never>; Returns: Json }
       transform_backfill_transactions: {
         Args: { end_date?: string; start_date?: string }
         Returns: Json
@@ -902,9 +1104,9 @@ export type Database = {
         Returns: Json
       }
       upsert_booking_guests: {
-        Args: { p_booking_id: string; p_guests: string[]; p_token?: string }
+        Args: { p_booking_id: string; p_guests: Json; p_token?: string }
         Returns: {
-          guests: string[]
+          guests: Json
           max_guests: number
         }[]
       }

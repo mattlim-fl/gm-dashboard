@@ -47,6 +47,7 @@ export function DashboardLayout({ children, headerActions }: DashboardLayoutProp
     if (path === '/design') return ['Design System'];
     if (path === '/api-test') return ['API Test'];
     if (path === '/feature-flags') return ['Feature Flags'];
+    if (path === '/photos' || path.startsWith('/photos')) return ['Photos'];
     
     // Fallback for any other routes
     return [path.charAt(1).toUpperCase() + path.slice(2)];

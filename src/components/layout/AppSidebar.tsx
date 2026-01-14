@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Home, Calendar, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, PartyPopper, Users2 } from "lucide-react";
+import { Home, Calendar, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, PartyPopper, Users2, Image } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { LastSyncIndicator } from "./LastSyncIndicator";
@@ -70,6 +70,14 @@ const operationsItems: MenuItem[] = [
     title: "Customers",
     url: "/customers",
     icon: Users,
+  },
+];
+
+const contentItems: MenuItem[] = [
+  {
+    title: "Photos",
+    url: "/photos",
+    icon: Image,
   },
 ];
 
@@ -170,6 +178,14 @@ export function AppSidebar() {
           <SidebarGroupLabel>Operations</SidebarGroupLabel>
           <SidebarGroupContent>
             {renderMenuItems(operationsItems)}
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Content Section */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Content</SidebarGroupLabel>
+          <SidebarGroupContent>
+            {renderMenuItems(contentItems)}
           </SidebarGroupContent>
         </SidebarGroup>
 

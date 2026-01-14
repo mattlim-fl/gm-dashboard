@@ -25,6 +25,7 @@ import BoothManagement from "./pages/BoothManagement";
 import ProfitAndLoss from "./pages/ProfitAndLoss";
 import Occasions from "./pages/Occasions";
 import Team from "./pages/Team";
+import Photos from "./pages/Photos";
 
 const queryClient = new QueryClient();
 
@@ -98,6 +99,11 @@ const App = () => (
                 <AdminRoute>
                   <Team />
                 </AdminRoute>
+              } />
+              <Route path="/photos" element={
+                <ProtectedRoute>
+                  <Photos />
+                </ProtectedRoute>
               } />
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -1,11 +1,13 @@
--- Enable required extensions (should already be enabled from previous migration)
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
+-- Update weekly notification schedule from Sunday 6 AM to Wednesday 6 AM AWST
+-- This migration updates the existing cron job to run on Wednesday mornings instead of Sunday mornings
 
--- Create a cron job to send weekly notifications every Wednesday at 6 AM AWST
+-- First, unschedule the existing cron job
+SELECT cron.unschedule('weekly-summary-notification');
+
+-- Create new cron job for Wednesday 6 AM AWST
 -- AWST is UTC+8, so 6 AM AWST = 10 PM Tuesday UTC
 -- Cron format: minute hour day-of-month month day-of-week
--- Tuesday = 2 in cron
+-- Tuesday = 2 in cron (0=Sunday, 1=Monday, 2=Tuesday...)
 SELECT cron.schedule(
   'weekly-summary-notification',
   '0 22 * * 2',  -- Every Tuesday at 10 PM UTC (Wednesday 6 AM AWST)
@@ -18,4 +20,3 @@ SELECT cron.schedule(
     ) as request_id;
   $$
 );
-
