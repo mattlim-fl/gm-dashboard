@@ -2,10 +2,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
-// @ts-expect-error - Deno crypto import
-import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts"
-// @ts-expect-error - Deno encoding import
-import { decode as base64Decode, encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 
 // Minimal declaration for Deno global
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,349 +14,17 @@ const corsHeaders: Record<string, string> = {
 }
 
 // =====================================================
-// XERO INTEGRATION - Direct API calls
+// BACKEND API INTEGRATION
+// Uses the same /xero/pnl endpoint as the dashboard
+// to ensure consistent data and DRY compliance
 // =====================================================
 
-interface XeroConnection {
-  id: string
-  tenant_id: string
-  access_token: string
-  refresh_token_enc: string
-  expires_at: string
-  scopes: string[]
-}
-
-interface XeroTokenResponse {
-  access_token: string
-  refresh_token: string
-  expires_in: number
-  token_type: string
-  scope?: string
-}
-
-/**
- * Decrypt the encrypted refresh token using AES-256-GCM
- */
-async function decryptRefreshToken(encryptedToken: string): Promise<string> {
-  const encryptionKey = Deno.env.get('XERO_TOKEN_ENCRYPTION_KEY')
-  if (!encryptionKey) {
-    throw new Error('XERO_TOKEN_ENCRYPTION_KEY not configured')
-  }
-
-  // Get the key (same logic as backend)
-  let keyBytes: Uint8Array
-  if (/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
-    // Hex string
-    keyBytes = new Uint8Array(encryptionKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
-  } else {
-    // Hash the key
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(encryptionKey)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', keyData)
-    keyBytes = new Uint8Array(hashBuffer)
-  }
-
-  // Decode the base64 encrypted data
-  const encryptedData = base64Decode(encryptedToken)
-  
-  // Extract IV (12 bytes), auth tag (16 bytes), and ciphertext
-  const iv = encryptedData.slice(0, 12)
-  const authTag = encryptedData.slice(12, 28)
-  const ciphertext = encryptedData.slice(28)
-
-  // Import the key
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  )
-
-  // Combine ciphertext and auth tag for Web Crypto API
-  const combinedCiphertext = new Uint8Array(ciphertext.length + authTag.length)
-  combinedCiphertext.set(ciphertext, 0)
-  combinedCiphertext.set(authTag, ciphertext.length)
-
-  // Decrypt
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    combinedCiphertext
-  )
-
-  return new TextDecoder().decode(decrypted)
-}
-
-/**
- * Encrypt the refresh token using AES-256-GCM (for updating after refresh)
- */
-async function encryptRefreshToken(plainToken: string): Promise<string> {
-  const encryptionKey = Deno.env.get('XERO_TOKEN_ENCRYPTION_KEY')
-  if (!encryptionKey) {
-    throw new Error('XERO_TOKEN_ENCRYPTION_KEY not configured')
-  }
-
-  // Get the key
-  let keyBytes: Uint8Array
-  if (/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
-    keyBytes = new Uint8Array(encryptionKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
-  } else {
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(encryptionKey)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', keyData)
-    keyBytes = new Uint8Array(hashBuffer)
-  }
-
-  // Generate random IV
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-
-  // Import the key
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  )
-
-  // Encrypt
-  const encoder = new TextEncoder()
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    encoder.encode(plainToken)
-  )
-
-  // Extract ciphertext and auth tag
-  const encryptedArray = new Uint8Array(encrypted)
-  const ciphertext = encryptedArray.slice(0, -16)
-  const authTag = encryptedArray.slice(-16)
-
-  // Combine: iv (12) + authTag (16) + ciphertext
-  const result = new Uint8Array(iv.length + authTag.length + ciphertext.length)
-  result.set(iv, 0)
-  result.set(authTag, 12)
-  result.set(ciphertext, 28)
-
-  return base64Encode(result)
-}
-
-/**
- * Refresh the Xero access token
- */
-async function refreshXeroToken(refreshToken: string): Promise<XeroTokenResponse> {
-  const clientId = Deno.env.get('XERO_CLIENT_ID')
-  const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')
-
-  if (!clientId || !clientSecret) {
-    throw new Error('XERO_CLIENT_ID or XERO_CLIENT_SECRET not configured')
-  }
-
-  const credentials = btoa(`${clientId}:${clientSecret}`)
-  
-  const response = await fetch('https://identity.xero.com/connect/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    }).toString(),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('Xero token refresh failed:', response.status, errorText)
-    throw new Error(`Xero token refresh failed: ${response.status}`)
-  }
-
-  return await response.json()
-}
-
-/**
- * Get Xero connection from database, refreshing token if needed
- */
-async function getXeroConnection(supabase: any): Promise<{ accessToken: string; tenantId: string } | null> {
-  // Fetch the stored connection
-  const { data: connection, error } = await supabase
-    .from('xero_connections')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error || !connection) {
-    console.error('No Xero connection found:', error?.message)
-    return null
-  }
-
-  const conn = connection as XeroConnection
-  const expiresAt = new Date(conn.expires_at).getTime()
-  const now = Date.now()
-  const fiveMinutes = 5 * 60 * 1000
-
-  // If token is about to expire (within 5 minutes), refresh it
-  if (expiresAt < now + fiveMinutes) {
-    console.log('Xero access token expired or expiring soon, refreshing...')
-    
-    try {
-      // Decrypt the refresh token
-      const decryptedRefreshToken = await decryptRefreshToken(conn.refresh_token_enc)
-      
-      // Refresh the access token
-      const newTokens = await refreshXeroToken(decryptedRefreshToken)
-      
-      // Encrypt the new refresh token
-      const encryptedRefreshToken = await encryptRefreshToken(newTokens.refresh_token)
-      
-      // Calculate new expiry
-      const newExpiresAt = new Date(now + newTokens.expires_in * 1000).toISOString()
-      
-      // Update the connection in database
-      const { error: updateError } = await supabase
-        .from('xero_connections')
-        .update({
-          access_token: newTokens.access_token,
-          refresh_token_enc: encryptedRefreshToken,
-          expires_at: newExpiresAt,
-          scopes: (newTokens.scope || '').split(/[\s,]+/).filter(Boolean),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('tenant_id', conn.tenant_id)
-
-      if (updateError) {
-        console.error('Failed to update Xero connection:', updateError.message)
-        throw new Error('Failed to update Xero connection')
-      }
-
-      console.log('Xero token refreshed successfully')
-      return { accessToken: newTokens.access_token, tenantId: conn.tenant_id }
-    } catch (err) {
-      console.error('Failed to refresh Xero token:', err)
-      // Try using the existing token anyway (might still work)
-      return { accessToken: conn.access_token, tenantId: conn.tenant_id }
-    }
-  }
-
-  return { accessToken: conn.access_token, tenantId: conn.tenant_id }
-}
-
-/**
- * Fetch P&L data directly from Xero API
- */
-async function fetchPnlFromXero(
-  accessToken: string,
-  tenantId: string,
-  startDate: string,
-  endDate: string
-): Promise<any> {
-  const params = new URLSearchParams({
-    fromDate: startDate,
-    toDate: endDate,
-  })
-  
-  const url = `https://api.xero.com/api.xro/2.0/Reports/ProfitAndLoss?${params.toString()}`
-  
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'xero-tenant-id': tenantId,
-      'Accept': 'application/json',
-    },
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('Xero P&L API failed:', response.status, errorText)
-    throw new Error(`Xero P&L failed: ${response.status}`)
-  }
-
-  return await response.json()
-}
-
-/**
- * Parse the Xero P&L response into our normalized format
- * (Same parsing logic as backend)
- */
-function parseXeroPnl(data: any, startDate: string, endDate: string): any {
-  let incomeTotal = 0
-  let expenseTotal = 0
-  const categories: Record<string, number> = {}
-  const uncategorized: any[] = []
-
-  const rows = (data?.Reports?.[0]?.Rows || []) as any[]
-
-  const parseAmount = (s: any): number => {
-    if (s == null) return 0
-    const str = String(s).replace(/[,\s]/g, '')
-    if (!str) return 0
-    const negative = /^\(.*\)$/.test(str)
-    const cleaned = str.replace(/[()]/g, '')
-    const n = Number(cleaned)
-    return negative ? -Math.abs(n) : n
-  }
-
-  function walk(rows: any[], section: string | null) {
-    for (const r of rows) {
-      if (r.RowType === 'Section') {
-        const title = (r.Title || '').toLowerCase()
-        if (title.includes('income') || title.includes('revenue')) {
-          walk(r.Rows || [], 'income')
-        } else if (title.includes('expense') || title.includes('cost')) {
-          walk(r.Rows || [], 'expense')
-        } else {
-          walk(r.Rows || [], section)
-        }
-      } else if (r.RowType === 'Row' && r.Cells) {
-        const label = (r.Cells[0]?.Value || '').toLowerCase()
-        const amount = parseAmount(r.Cells[1]?.Value)
-        
-        if (section === 'income') {
-          incomeTotal += amount
-        } else if (section === 'expense') {
-          expenseTotal += amount
-          
-          // Categorize expenses
-          if (label.includes('wage') || label.includes('salary') || label.includes('payroll') || label.includes('super')) {
-            categories.wages = (categories.wages || 0) + amount
-          } else if (label.includes('cost of goods') || label.includes('cogs') || label.includes('purchases') || label.includes('stock')) {
-            categories.cogs = (categories.cogs || 0) + amount
-          } else if (label.includes('security')) {
-            categories.security = (categories.security || 0) + amount
-          } else {
-            uncategorized.push({ label, amount })
-          }
-        }
-      } else if (r.RowType === 'SummaryRow' && r.Cells) {
-        // Skip summary rows, we calculate our own totals
-      }
-    }
-  }
-
-  walk(rows, null)
-
-  const netProfit = incomeTotal - expenseTotal
-
-  console.log('Parsed Xero P&L:', {
-    incomeTotal,
-    expenseTotal,
-    netProfit,
-    categories,
-  })
-
-  return {
-    period: { start: startDate, end: endDate },
-    totals: {
-      revenue: incomeTotal,
-      expenses: expenseTotal,
-      netProfit,
-    },
-    categories,
-    uncategorized,
-  }
+interface PnlResponse {
+  period: { start: string; end: string }
+  totals: { income: number; expenses: number; netProfit: number }
+  categories: Record<string, number>
+  uncategorized: Array<{ name?: string; section?: string; amount: number }>
+  meta?: { cached: boolean; lastUpdated?: string }
 }
 
 interface BusinessPerformanceData {
@@ -411,6 +75,7 @@ interface NotificationSettings {
 const NOTIFICATION_TYPE = 'business_performance'
 const EMAIL_TEMPLATE = 'business-performance'
 const DASHBOARD_URL = 'https://gm-dashboard.getproductbox.com'
+const API_BASE_URL = 'https://gm-dashboard.getproductbox.com/api'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -447,17 +112,17 @@ function calculateDateRanges(): {
 } {
   const now = new Date()
   now.setHours(23, 59, 59, 999)
-  
+
   // Last 7 days
   const currentStart = new Date(now)
   currentStart.setDate(currentStart.getDate() - 6)
   currentStart.setHours(0, 0, 0, 0)
-  
+
   // Previous 7 days
   const previousStart = new Date(currentStart)
   previousStart.setDate(previousStart.getDate() - 7)
   previousStart.setHours(0, 0, 0, 0)
-  
+
   const previousEnd = new Date(currentStart.getTime() - 1)
 
   return {
@@ -469,38 +134,53 @@ function calculateDateRanges(): {
 }
 
 /**
- * Fetch P&L data directly from Xero API
+ * Fetch P&L data from the backend API
+ * This ensures we use the same parsing/categorization logic as the dashboard
  */
-async function fetchPnlData(supabase: any, startDate: Date, endDate: Date): Promise<any> {
+async function fetchPnlFromBackend(startDate: Date, endDate: Date): Promise<PnlResponse | null> {
   const startDateStr = startDate.toISOString().split('T')[0]
   const endDateStr = endDate.toISOString().split('T')[0]
-  
+
+  const API_CRON_SECRET = Deno.env.get('API_CRON_SECRET')
+
+  if (!API_CRON_SECRET) {
+    console.error('API_CRON_SECRET not configured - cannot authenticate with backend')
+    return null
+  }
+
   try {
-    console.log(`Fetching P&L data from Xero: ${startDateStr} to ${endDateStr}`)
-    
-    // Get Xero connection (will refresh token if needed)
-    const xeroConnection = await getXeroConnection(supabase)
-    
-    if (!xeroConnection) {
-      console.error('No Xero connection available')
+    console.log(`Fetching P&L from backend API: ${startDateStr} to ${endDateStr}`)
+
+    const response = await fetch(`${API_BASE_URL}/xero/pnl`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-cron-key': API_CRON_SECRET,
+      },
+      body: JSON.stringify({
+        startDate: startDateStr,
+        endDate: endDateStr,
+        refresh: false, // Use cached data if available
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Backend P&L API failed:', response.status, errorText)
       return null
     }
-    
-    // Fetch raw P&L from Xero
-    const rawPnl = await fetchPnlFromXero(
-      xeroConnection.accessToken,
-      xeroConnection.tenantId,
-      startDateStr,
-      endDateStr
-    )
-    
-    // Parse into our format
-    const parsedPnl = parseXeroPnl(rawPnl, startDateStr, endDateStr)
-    
-    console.log('P&L data parsed:', JSON.stringify(parsedPnl))
-    return parsedPnl
+
+    const data = await response.json() as PnlResponse
+
+    console.log('P&L data from backend:', JSON.stringify({
+      period: data.period,
+      totals: data.totals,
+      categories: data.categories,
+    }))
+
+    return data
   } catch (error) {
-    console.error('Error fetching P&L data from Xero:', error)
+    console.error('Error fetching P&L from backend:', error)
     return null
   }
 }
@@ -542,10 +222,10 @@ async function fetchRevenueAndAttendance(
 async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerformanceData> {
   const dateRanges = calculateDateRanges()
 
-  // Fetch P&L data for both periods (direct from Xero)
+  // Fetch P&L data from backend API (uses same logic as dashboard)
   const [currentPnl, previousPnl, currentMetrics, previousMetrics] = await Promise.all([
-    fetchPnlData(supabase, dateRanges.currentStart, dateRanges.currentEnd),
-    fetchPnlData(supabase, dateRanges.previousStart, dateRanges.previousEnd),
+    fetchPnlFromBackend(dateRanges.currentStart, dateRanges.currentEnd),
+    fetchPnlFromBackend(dateRanges.previousStart, dateRanges.previousEnd),
     fetchRevenueAndAttendance(supabase, dateRanges.currentStart, dateRanges.currentEnd),
     fetchRevenueAndAttendance(supabase, dateRanges.previousStart, dateRanges.previousEnd),
   ])
@@ -553,16 +233,16 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   // Revenue from Square is in cents GST-inclusive
   const currentRevenueCents = currentMetrics.revenue
   const previousRevenueCents = previousMetrics.revenue
-  
+
   // Convert to GST-exclusive dollars (same as dashboard/financialService)
   const currentRevenue = (currentRevenueCents / 100) / 1.1
   const previousRevenue = (previousRevenueCents / 100) / 1.1
 
-  // P&L data from Xero is already in dollars GST-exclusive (parsed via parseXeroPnl)
-  // Use Xero revenue if available, otherwise use Square revenue
-  const currentXeroRevenue = currentPnl?.totals?.revenue || 0
-  const previousXeroRevenue = previousPnl?.totals?.revenue || 0
-  
+  // P&L data from backend is already in dollars GST-exclusive
+  // Backend uses 'income' for revenue in totals
+  const currentXeroRevenue = currentPnl?.totals?.income || 0
+  const previousXeroRevenue = previousPnl?.totals?.income || 0
+
   // For display, prefer Xero revenue if available as it may be more accurate
   const displayCurrentRevenue = currentXeroRevenue > 0 ? currentXeroRevenue : currentRevenue
   const displayPreviousRevenue = previousXeroRevenue > 0 ? previousXeroRevenue : previousRevenue
@@ -581,10 +261,10 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
 
   // Use Xero's net profit if available, otherwise calculate from revenue - expenses
   const currentNetProfit = currentNetProfitFromXero !== undefined && currentNetProfitFromXero !== 0
-    ? currentNetProfitFromXero 
+    ? currentNetProfitFromXero
     : displayCurrentRevenue - currentExpenses
   const previousNetProfit = previousNetProfitFromXero !== undefined && previousNetProfitFromXero !== 0
-    ? previousNetProfitFromXero 
+    ? previousNetProfitFromXero
     : displayPreviousRevenue - previousExpenses
 
   const currentNetProfitMargin = displayCurrentRevenue > 0 ? (currentNetProfit / displayCurrentRevenue) * 100 : 0
@@ -600,8 +280,8 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const previousSecurityPercent = displayPreviousRevenue > 0 ? (previousSecurity / displayPreviousRevenue) * 100 : 0
 
   // Spend per head in dollars (GST-inclusive for customer-facing metric)
-  const currentSpendPerHead = currentMetrics.attendance > 0 
-    ? (currentRevenueCents / 100) / currentMetrics.attendance 
+  const currentSpendPerHead = currentMetrics.attendance > 0
+    ? (currentRevenueCents / 100) / currentMetrics.attendance
     : 0
 
   // Calculate changes
@@ -702,7 +382,7 @@ CRITICAL: Return ONLY the HTML code with NO markdown code blocks, NO explanation
 
 Structure the email as:
 
-1. **Header Section**: 
+1. **Header Section**:
    - Title: "Weekly Business Performance Report" (large, bold, black color)
    - Date range subtitle (${data.period.start} - ${data.period.end})
 
@@ -714,7 +394,7 @@ Structure the email as:
    - % of Revenue (for costs)
    - Previous Week comparison
    - Change indicator
-   
+
    Include these rows: Revenue, Net Profit (with margin %), Wages, COGS, Security
 
 4. **Cost Efficiency Analysis**
@@ -733,18 +413,18 @@ Structure the email as:
 
 **Styling Guidelines - Clean Professional Look:**
 - **Background**: #ffffff (white) for body
-- **Text Colors**: 
+- **Text Colors**:
   - Section Headers: #1e293b (dark slate, bold, large)
   - Body text: #334155 (slate gray)
   - Secondary text: #64748b (muted gray)
-- **Table Styling**: 
+- **Table Styling**:
   - Header row: #475569 (slate gray) background with #ffffff (white) text
   - Data rows: Alternating #f8fafc and #ffffff backgrounds with #334155 text
   - Borders: #e2e8f0 (light gray border)
 - **Visual Indicators**: ✅ for positive trends, ⚠️ for concerning trends
-- **Color Coding for Changes**: 
+- **Color Coding for Changes**:
   - Positive (revenue/profit up, costs down): #16a34a (green)
-  - Negative (revenue/profit down, costs up): #dc2626 (red)  
+  - Negative (revenue/profit down, costs up): #dc2626 (red)
   - Neutral: #64748b (gray)
 - **CTA Button**: Background #f97316 (orange), #ffffff (white) text color, rounded corners, no gradient
 - **Typography**: Use system fonts (-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto)
@@ -788,12 +468,12 @@ Remember: Return ONLY HTML code, no markdown formatting or explanations.`
 
     const result = await response.json()
     let htmlContent = result.choices[0].message.content
-    
+
     // Clean up any markdown artifacts
     htmlContent = htmlContent.replace(/^```html\n?/i, '')
     htmlContent = htmlContent.replace(/\n?```\s*$/i, '')
     htmlContent = htmlContent.trim()
-    
+
     return htmlContent
   } catch (error) {
     console.error('Error generating AI email:', error)
@@ -908,7 +588,7 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-    
+
     // Parse request body for test mode flags
     const body = await req.json().catch(() => ({}))
     const testEmailOnly = body.test_email_only === true
@@ -939,12 +619,12 @@ serve(async (req: Request) => {
 
     // Generate content once (used for both preview and sending)
     const whatsappMessage = generateWhatsAppMessage(performanceData)
-    
+
     // If preview mode, generate email content and return without sending
     if (previewOnly) {
       console.log('Preview mode - generating content without sending...')
       const emailHtml = await generateAIEmail(performanceData)
-      
+
       return json({
         success: true,
         preview: {
@@ -960,15 +640,15 @@ serve(async (req: Request) => {
     if (!testEmailOnly) {
       const WHATSAPP_API_KEY = Deno.env.get('WHATSAPP_BUSINESS_API_KEY')
       const WHATSAPP_PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')
-      
-      if (WHATSAPP_API_KEY && WHATSAPP_PHONE_NUMBER_ID && 
+
+      if (WHATSAPP_API_KEY && WHATSAPP_PHONE_NUMBER_ID &&
           notificationSettings.whatsapp_numbers && notificationSettings.whatsapp_numbers.length > 0) {
-        
+
         for (const phoneNumber of notificationSettings.whatsapp_numbers) {
           console.log(`Sending WhatsApp to ${phoneNumber}...`)
           const success = await sendWhatsAppMessage(phoneNumber, whatsappMessage)
           whatsappResults.push({ recipient: phoneNumber, success })
-          
+
           await logNotification(
             supabase,
             NOTIFICATION_TYPE,
@@ -995,7 +675,7 @@ serve(async (req: Request) => {
         console.log(`Sending email to ${email}...`)
         const success = await sendEmail(supabase, email, subject, emailHtml)
         emailResults.push({ recipient: email, success })
-        
+
         await logNotification(
           supabase,
           NOTIFICATION_TYPE,
