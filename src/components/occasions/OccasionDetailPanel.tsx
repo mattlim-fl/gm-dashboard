@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { occasionService, OccasionWithStats } from '@/services/occasionService';
 import { Copy, Check, ExternalLink, Users, Calendar, DollarSign, Mail, Phone, Plus, UserPlus, Trash2, Edit, Save, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import GuestListGrouped from './GuestListGrouped';
 
 interface OccasionDetailPanelProps {
   occasionId: string | null;
@@ -558,6 +559,8 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                     size="sm"
                     variant="outline"
                     onClick={handleAddGuests}
+                    disabled={occasion.remaining_capacity === 0}
+                    title={occasion.remaining_capacity === 0 ? 'At capacity' : undefined}
                   >
                     <Plus className="h-4 w-4 mr-1" />
                     Add guests
@@ -581,80 +584,16 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
               </div>
             )}
 
-            {allGuests.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">No guests yet</p>
-            ) : (
-              <>
-                <div className="overflow-x-auto border dark:border-gray-700 rounded-lg">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr className="border-b dark:border-gray-700">
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">#</th>
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Guest Name</th>
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Invited By</th>
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</th>
-                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="dark:bg-gray-900">
-                      {allGuests.map((guest, idx) => {
-                        const key = `${guest.bookingId}-${guest.index}`;
-                        const currentValue = editingGuests[key] || '';
-                        
-                        return (
-                          <tr key={idx} className="border-b dark:border-gray-700 last:border-b-0">
-                            <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">{idx + 1}</td>
-                            <td className="py-2 px-4">
-                              <input
-                                type="text"
-                                value={currentValue}
-                                onChange={(e) => handleGuestNameChange(guest.bookingId, guest.index, e.target.value)}
-                                placeholder={`Guest ${idx + 1} full name`}
-                                disabled={guest.isOrganiser}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:text-gray-900 dark:disabled:text-gray-100"
-                              />
-                            </td>
-                            <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-300">{guest.invitedBy}</td>
-                            <td className="py-3 px-4">
-                              {guest.isOrganiser && (
-                                <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                                  Organiser
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              {!guest.isOrganiser && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteGuest(guest.bookingId, guest.index, currentValue || `Guest ${idx + 1}`)}
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* Add Single Guest Button */}
-                <div className="mt-3 flex justify-center">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={addSingleGuest}
-                    className="text-sm"
-                  >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Add single guest
-                  </Button>
-                </div>
-              </>
-            )}
+            <GuestListGrouped
+              guests={allGuests}
+              editingGuests={editingGuests}
+              organiserName={occasion?.organiser_name || 'Organiser'}
+              onGuestNameChange={handleGuestNameChange}
+              onDeleteGuest={handleDeleteGuest}
+              onAddSingleGuest={addSingleGuest}
+              showActions={true}
+              isAtCapacity={occasion.remaining_capacity === 0}
+            />
 
             {allGuests.length > 0 && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
