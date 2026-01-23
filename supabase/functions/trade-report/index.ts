@@ -18,6 +18,11 @@ interface WeeklySummaryData {
     start: string
     end: string
   }
+  saturdayLabels: {
+    current: string
+    previous: string
+    yearAgo: string
+  }
   current: {
     barRevenue: number
     doorRevenue: number
@@ -30,12 +35,14 @@ interface WeeklySummaryData {
     doorRevenue: number
     totalRevenue: number
     attendance: number
+    spendPerHead: number
   }
   yearAgo: {
     barRevenue: number
     doorRevenue: number
     totalRevenue: number
     attendance: number
+    spendPerHead: number
   }
   changes: {
     barRevenuePercent: number
@@ -58,7 +65,6 @@ interface NotificationSettings {
 // Constants
 const NOTIFICATION_TYPE = 'trade_report'
 const EMAIL_TEMPLATE = 'trade-report'
-const DASHBOARD_URL = 'https://gm-dashboard.getproductbox.com'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -71,13 +77,30 @@ function formatCurrency(cents: number): string {
   return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-function formatPercent(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(1)}%`
-}
-
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })
+}
+
+/**
+ * Find the Saturday within a 7-day date range and format as "Saturday - dd/mm/yyyy"
+ */
+function getSaturdayLabel(startDate: Date, endDate: Date): string {
+  const current = new Date(startDate)
+  while (current <= endDate) {
+    if (current.getDay() === 6) { // 6 = Saturday
+      const day = current.getDate().toString().padStart(2, '0')
+      const month = (current.getMonth() + 1).toString().padStart(2, '0')
+      const year = current.getFullYear()
+      return `Saturday - ${day}/${month}/${year}`
+    }
+    current.setDate(current.getDate() + 1)
+  }
+  // Fallback: use end date
+  const d = endDate
+  const day = d.getDate().toString().padStart(2, '0')
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  const year = d.getFullYear()
+  return `Saturday - ${day}/${month}/${year}`
 }
 
 /**
@@ -219,10 +242,23 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
     throw errors[0].error || new Error(`Failed to fetch period data: ${errorMessages}`)
   }
 
-  // Calculate spend per head
-  const currentSpendPerHead = currentMetrics.attendance > 0 
-    ? currentMetrics.revenue / currentMetrics.attendance 
+  // Calculate spend per head for all periods
+  const currentSpendPerHead = currentMetrics.attendance > 0
+    ? currentMetrics.revenue / currentMetrics.attendance
     : 0
+  const previousSpendPerHead = previousMetrics.attendance > 0
+    ? previousMetrics.revenue / previousMetrics.attendance
+    : 0
+  const yearAgoSpendPerHead = yearAgoMetrics.attendance > 0
+    ? yearAgoMetrics.revenue / yearAgoMetrics.attendance
+    : 0
+
+  // Calculate Saturday labels for each period
+  const saturdayLabels = {
+    current: getSaturdayLabel(dateRanges.currentWeekStart, dateRanges.currentWeekEnd),
+    previous: getSaturdayLabel(dateRanges.previousWeekStart, dateRanges.previousWeekEnd),
+    yearAgo: getSaturdayLabel(dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
+  }
 
   // Calculate percentage changes using helper function
   const barRevenuePercent = calculatePercentChange(currentMetrics.barRevenue, previousMetrics.barRevenue)
@@ -240,6 +276,7 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
       start: formatDate(dateRanges.currentWeekStart),
       end: formatDate(dateRanges.currentWeekEnd),
     },
+    saturdayLabels,
     current: {
       barRevenue: currentMetrics.barRevenue,
       doorRevenue: currentMetrics.doorRevenue,
@@ -252,12 +289,14 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
       doorRevenue: previousMetrics.doorRevenue,
       totalRevenue: previousMetrics.revenue,
       attendance: previousMetrics.attendance,
+      spendPerHead: previousSpendPerHead,
     },
     yearAgo: {
       barRevenue: yearAgoMetrics.barRevenue,
       doorRevenue: yearAgoMetrics.doorRevenue,
       totalRevenue: yearAgoMetrics.revenue,
       attendance: yearAgoMetrics.attendance,
+      spendPerHead: yearAgoSpendPerHead,
     },
     changes: {
       barRevenuePercent,
@@ -273,13 +312,28 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
 }
 
 function generateWhatsAppMessage(data: WeeklySummaryData): string {
-  return `📊 Weekly Trade Report (${data.period.start} - ${data.period.end})
+  return `Weekly Trade Report
 
-Bar: ${formatCurrency(data.current.barRevenue)} (${formatPercent(data.changes.barRevenuePercent)})
-Door: ${formatCurrency(data.current.doorRevenue)} (${formatPercent(data.changes.doorRevenuePercent)})
-Total: ${formatCurrency(data.current.totalRevenue)} (${formatPercent(data.changes.totalRevenuePercent)})
-Attendance: ${data.current.attendance.toLocaleString()} (${formatPercent(data.changes.attendancePercent)})
-Spend/Head: ${formatCurrency(data.current.spendPerHead)}`
+${data.saturdayLabels.current}
+Bar Revenue - ${formatCurrency(data.current.barRevenue)} (ex GST)
+Door Revenue - ${formatCurrency(data.current.doorRevenue)} (ex GST)
+Total Revenue - ${formatCurrency(data.current.totalRevenue)} (ex GST)
+Attendance - ${data.current.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.current.spendPerHead)}
+
+${data.saturdayLabels.previous}
+Bar Revenue - ${formatCurrency(data.previousWeek.barRevenue)}
+Door Revenue - ${formatCurrency(data.previousWeek.doorRevenue)}
+Total Revenue - ${formatCurrency(data.previousWeek.totalRevenue)}
+Attendance - ${data.previousWeek.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.previousWeek.spendPerHead)}
+
+${data.saturdayLabels.yearAgo}
+Bar Revenue - ${formatCurrency(data.yearAgo.barRevenue)}
+Door Revenue - ${formatCurrency(data.yearAgo.doorRevenue)}
+Total Revenue - ${formatCurrency(data.yearAgo.totalRevenue)}
+Attendance - ${data.yearAgo.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.yearAgo.spendPerHead)}`
 }
 
 async function sendWhatsAppMessage(phoneNumber: string, message: string): Promise<boolean> {
@@ -331,80 +385,44 @@ async function generateAIEmail(data: WeeklySummaryData): Promise<string> {
     throw new Error('OPENAI_API_KEY not configured')
   }
 
-  const prompt = `You are a nightlife venue operations analyst providing weekly performance insights. 
+  const prompt = `Format the following venue performance data as a clean HTML email table.
 
-Analyze the following weekly data and create a comprehensive HTML email report:
+Title: "Weekly Trade Report"
 
-**Current Week (${data.period.start} - ${data.period.end}):**
-- Bar Revenue: ${formatCurrency(data.current.barRevenue)}
-- Door Revenue: ${formatCurrency(data.current.doorRevenue)}
-- Total Revenue: ${formatCurrency(data.current.totalRevenue)}
-- Attendance: ${data.current.attendance} people
-- Spend per Head: ${formatCurrency(data.current.spendPerHead)}
+Data to display in a table with 3 columns:
 
-**Previous Week Comparison:**
-- Bar Revenue: ${formatCurrency(data.previousWeek.barRevenue)} (${formatPercent(data.changes.barRevenuePercent)})
-- Door Revenue: ${formatCurrency(data.previousWeek.doorRevenue)} (${formatPercent(data.changes.doorRevenuePercent)})
-- Total Revenue: ${formatCurrency(data.previousWeek.totalRevenue)} (${formatPercent(data.changes.totalRevenuePercent)})
-- Attendance: ${data.previousWeek.attendance} people (${formatPercent(data.changes.attendancePercent)})
+Column headers: ${data.saturdayLabels.current} | ${data.saturdayLabels.previous} | ${data.saturdayLabels.yearAgo}
 
-**Year-over-Year Comparison (same week last year):**
-- Bar Revenue: ${formatCurrency(data.yearAgo.barRevenue)} (${formatPercent(data.changes.barRevenueYoY)})
-- Door Revenue: ${formatCurrency(data.yearAgo.doorRevenue)} (${formatPercent(data.changes.doorRevenueYoY)})
-- Total Revenue: ${formatCurrency(data.yearAgo.totalRevenue)} (${formatPercent(data.changes.totalRevenueYoY)})
-- Attendance: ${data.yearAgo.attendance} people (${formatPercent(data.changes.attendanceYoY)})
+Rows:
+- Bar Revenue (ex GST): ${formatCurrency(data.current.barRevenue)} | ${formatCurrency(data.previousWeek.barRevenue)} | ${formatCurrency(data.yearAgo.barRevenue)}
+- Door Revenue (ex GST): ${formatCurrency(data.current.doorRevenue)} | ${formatCurrency(data.previousWeek.doorRevenue)} | ${formatCurrency(data.yearAgo.doorRevenue)}
+- Total Revenue (ex GST): ${formatCurrency(data.current.totalRevenue)} | ${formatCurrency(data.previousWeek.totalRevenue)} | ${formatCurrency(data.yearAgo.totalRevenue)}
+- Attendance: ${data.current.attendance.toLocaleString()} | ${data.previousWeek.attendance.toLocaleString()} | ${data.yearAgo.attendance.toLocaleString()}
+- Spend Per Head: ${formatCurrency(data.current.spendPerHead)} | ${formatCurrency(data.previousWeek.spendPerHead)} | ${formatCurrency(data.yearAgo.spendPerHead)}
 
-CRITICAL: Return ONLY the HTML code with NO markdown code blocks, NO explanations, NO \`\`\`html tags. Start directly with the HTML.
+CRITICAL: Return ONLY the HTML code. No markdown, no code blocks, no explanations.
 
-Structure the email as:
+Requirements:
+- Title "Weekly Trade Report" as a header
+- A single data table with the rows and columns above
+- The first column in the table should be the metric name (Bar Revenue, Door Revenue, etc.)
+- NO executive summary, NO analysis, NO recommendations, NO commentary, NO CTA button
+- NO date range subtitle, NO descriptive text
+- Just the title and the data table, nothing else
 
-1. **Header Section**: 
-   - Title: "Weekly Venue Performance Report" (large, bold, black color)
-   - Date range subtitle (${data.period.start} - ${data.period.end})
+Styling:
+- Background: #ffffff
+- Title: #1e293b, bold, large, centered
+- Table header row: #475569 background, #ffffff text, font-size 13px
+- Data rows: alternating #f8fafc and #ffffff, text #334155
+- Metric name column: bold
+- Borders: #e2e8f0
+- Typography: system fonts (-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto)
+- Mobile-responsive (table width 100%)
+- Clean, minimal design
+- Padding: 12px in cells
 
-2. **Executive Summary** (2-3 sentences with the most critical insights)
-
-3. **Key Metrics Table** with columns:
-   - Metric name
-   - Current Week value
-   - Last Week value  
-   - % Change (with total change in brackets)
-   
-   Include these rows: Bar Revenue, Door Revenue, Total Revenue, Attendance, Spend per Head
-
-4. **Performance Analysis**
-   - What's trending up and why it matters
-   - What needs attention and potential causes
-   - Notable patterns (e.g., bar vs door revenue mix, spend per head trends)
-
-4. **Strategic Recommendations** (2-3 specific, actionable suggestions)
-
-5. **Call-to-Action Button**: "View Full Dashboard" linking to ${DASHBOARD_URL}
-
-**Styling Guidelines - Clean Professional Look:**
-- **Background**: #ffffff (white) for body
-- **Text Colors**: 
-  - Section Headers: #1e293b (dark slate, bold, large)
-  - Body text: #334155 (slate gray)
-  - Secondary text: #64748b (muted gray)
-- **Table Styling**: 
-  - Header row: #475569 (slate gray) background with #ffffff (white) text
-  - Data rows: Alternating #f8fafc and #ffffff backgrounds with #334155 text
-  - Borders: #e2e8f0 (light gray border)
-- **Visual Indicators**: ✅ for positive trends, ⚠️ for concerning trends
-- **Color Coding for Changes**: 
-  - Positive: #16a34a (green)
-  - Negative: #dc2626 (red)  
-  - Neutral: #64748b (gray)
-- **CTA Button**: Background #f97316 (orange), #ffffff (white) text color, rounded corners, no gradient
-- **Typography**: Use system fonts (-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto)
-- Mobile-responsive design
-- Keep under 500 words
-- DO NOT use dark backgrounds
-
-**Tone:** Professional but energetic. Focus on insights and opportunities.
-
-Remember: Return ONLY HTML code, no markdown formatting or explanations.`
+Return ONLY HTML code.`
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -418,15 +436,15 @@ Remember: Return ONLY HTML code, no markdown formatting or explanations.`
         messages: [
           {
             role: 'system',
-            content: 'You are a venue operations analyst. Generate professional HTML email reports with business insights. Return ONLY raw HTML code with no markdown formatting, no code blocks, and no explanations.',
+            content: 'You are a data formatter. Generate clean, simple HTML email tables displaying venue performance data. Return ONLY raw HTML code with no markdown formatting, no code blocks, and no explanations. Do NOT include any analysis, commentary, recommendations, or insights.',
           },
           {
             role: 'user',
             content: prompt,
           },
         ],
-        temperature: 0.7,
-        max_tokens: 2000,
+        temperature: 0.3,
+        max_tokens: 1000,
       }),
     })
 
@@ -597,7 +615,7 @@ serve(async (req: Request) => {
     if (!testWhatsAppOnly && notificationSettings.recipient_emails && notificationSettings.recipient_emails.length > 0) {
       console.log('Generating AI email content...')
       const emailHtml = await generateAIEmail(summaryData)
-      const subject = `Weekly Trade Report: ${summaryData.period.start} - ${summaryData.period.end}`
+      const subject = `Weekly Trade Report - ${summaryData.saturdayLabels.current.replace('Saturday - ', '')}`
 
       for (const email of notificationSettings.recipient_emails) {
         console.log(`Sending email to ${email}...`)

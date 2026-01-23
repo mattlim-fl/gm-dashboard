@@ -388,10 +388,13 @@ interface BusinessPerformanceData {
     start: string
     end: string
   }
+  saturdayLabels: {
+    current: string
+    previous: string
+    yearAgo: string
+  }
   current: {
     revenue: number
-    netProfit: number
-    netProfitMargin: number
     wages: number
     wagesPercent: number
     cogs: number
@@ -403,21 +406,39 @@ interface BusinessPerformanceData {
   }
   previous: {
     revenue: number
-    netProfit: number
-    netProfitMargin: number
     wages: number
     wagesPercent: number
     cogs: number
     cogsPercent: number
     security: number
     securityPercent: number
+    attendance: number
+    spendPerHead: number
+  }
+  yearAgo: {
+    revenue: number
+    wages: number
+    wagesPercent: number
+    cogs: number
+    cogsPercent: number
+    security: number
+    securityPercent: number
+    attendance: number
+    spendPerHead: number
   }
   changes: {
     revenuePercent: number
-    netProfitPercent: number
+    revenueYoY: number
     wagesPercentChange: number
+    wagesYoY: number
     cogsPercentChange: number
+    cogsYoY: number
     securityPercentChange: number
+    securityYoY: number
+    attendancePercent: number
+    attendanceYoY: number
+    spendPerHeadPercent: number
+    spendPerHeadYoY: number
   }
 }
 
@@ -430,7 +451,6 @@ interface NotificationSettings {
 // Constants
 const NOTIFICATION_TYPE = 'business_performance'
 const EMAIL_TEMPLATE = 'business-performance'
-const DASHBOARD_URL = 'https://gm-dashboard.getproductbox.com'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -443,13 +463,30 @@ function formatCurrency(cents: number): string {
   return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-function formatPercent(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(1)}%`
-}
-
 function formatDate(date: Date): string {
   return date.toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })
+}
+
+/**
+ * Find the Saturday within a 7-day date range and format as "Saturday - dd/mm/yyyy"
+ */
+function getSaturdayLabel(startDate: Date, endDate: Date): string {
+  const current = new Date(startDate)
+  while (current <= endDate) {
+    if (current.getDay() === 6) { // 6 = Saturday
+      const day = current.getDate().toString().padStart(2, '0')
+      const month = (current.getMonth() + 1).toString().padStart(2, '0')
+      const year = current.getFullYear()
+      return `Saturday - ${day}/${month}/${year}`
+    }
+    current.setDate(current.getDate() + 1)
+  }
+  // Fallback: use end date
+  const d = endDate
+  const day = d.getDate().toString().padStart(2, '0')
+  const month = (d.getMonth() + 1).toString().padStart(2, '0')
+  const year = d.getFullYear()
+  return `Saturday - ${day}/${month}/${year}`
 }
 
 function calculatePercentChange(current: number, previous: number): number {
@@ -464,27 +501,38 @@ function calculateDateRanges(): {
   currentEnd: Date
   previousStart: Date
   previousEnd: Date
+  yearAgoStart: Date
+  yearAgoEnd: Date
 } {
   const now = new Date()
   now.setHours(23, 59, 59, 999)
-  
+
   // Last 7 days (matches dashboard's getPeriodDates logic)
   const currentStart = new Date(now)
   currentStart.setDate(currentStart.getDate() - 7)
   currentStart.setHours(0, 0, 0, 0)
-  
+
   // Previous 7 days
   const previousStart = new Date(currentStart)
   previousStart.setDate(previousStart.getDate() - 7)
   previousStart.setHours(0, 0, 0, 0)
-  
+
   const previousEnd = new Date(currentStart.getTime() - 1)
+
+  // Year-over-year: same date range as current period, one year ago
+  const yearAgoStart = new Date(currentStart)
+  yearAgoStart.setFullYear(yearAgoStart.getFullYear() - 1)
+
+  const yearAgoEnd = new Date(now)
+  yearAgoEnd.setFullYear(yearAgoEnd.getFullYear() - 1)
 
   return {
     currentStart,
     currentEnd: now,
     previousStart,
     previousEnd,
+    yearAgoStart,
+    yearAgoEnd,
   }
 }
 
@@ -562,53 +610,48 @@ async function fetchRevenueAndAttendance(
 async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerformanceData> {
   const dateRanges = calculateDateRanges()
 
-  // Fetch P&L data for both periods (direct from Xero)
-  const [currentPnl, previousPnl, currentMetrics, previousMetrics] = await Promise.all([
+  // Fetch P&L data for all three periods (direct from Xero) + revenue/attendance from Square
+  const [currentPnl, previousPnl, yearAgoPnl, currentMetrics, previousMetrics, yearAgoMetrics] = await Promise.all([
     fetchPnlData(supabase, dateRanges.currentStart, dateRanges.currentEnd),
     fetchPnlData(supabase, dateRanges.previousStart, dateRanges.previousEnd),
+    fetchPnlData(supabase, dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
     fetchRevenueAndAttendance(supabase, dateRanges.currentStart, dateRanges.currentEnd),
     fetchRevenueAndAttendance(supabase, dateRanges.previousStart, dateRanges.previousEnd),
+    fetchRevenueAndAttendance(supabase, dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
   ])
 
   // Revenue from Square is in cents GST-inclusive
   const currentRevenueCents = currentMetrics.revenue
   const previousRevenueCents = previousMetrics.revenue
-  
+  const yearAgoRevenueCents = yearAgoMetrics.revenue
+
   // Convert to GST-exclusive dollars (same as dashboard/financialService)
   const currentRevenue = (currentRevenueCents / 100) / 1.1
   const previousRevenue = (previousRevenueCents / 100) / 1.1
+  const yearAgoRevenue = (yearAgoRevenueCents / 100) / 1.1
 
   // P&L data from Xero is already in dollars GST-exclusive (parsed via parseXeroPnl)
   // Use Xero revenue if available, otherwise use Square revenue
   const currentXeroRevenue = currentPnl?.totals?.revenue || 0
   const previousXeroRevenue = previousPnl?.totals?.revenue || 0
-  
+  const yearAgoXeroRevenue = yearAgoPnl?.totals?.revenue || 0
+
   // For display, prefer Xero revenue if available as it may be more accurate
   const displayCurrentRevenue = currentXeroRevenue > 0 ? currentXeroRevenue : currentRevenue
   const displayPreviousRevenue = previousXeroRevenue > 0 ? previousXeroRevenue : previousRevenue
+  const displayYearAgoRevenue = yearAgoXeroRevenue > 0 ? yearAgoXeroRevenue : yearAgoRevenue
 
   const currentWages = currentPnl?.categories?.wages || 0
   const currentCogs = currentPnl?.categories?.cogs || 0
   const currentSecurity = currentPnl?.categories?.security || 0
-  const currentExpenses = currentPnl?.totals?.expenses || 0
-  const currentNetProfitFromXero = currentPnl?.totals?.netProfit
 
   const previousWages = previousPnl?.categories?.wages || 0
   const previousCogs = previousPnl?.categories?.cogs || 0
   const previousSecurity = previousPnl?.categories?.security || 0
-  const previousExpenses = previousPnl?.totals?.expenses || 0
-  const previousNetProfitFromXero = previousPnl?.totals?.netProfit
 
-  // Use Xero's net profit if available, otherwise calculate from revenue - expenses
-  const currentNetProfit = currentNetProfitFromXero !== undefined && currentNetProfitFromXero !== 0
-    ? currentNetProfitFromXero 
-    : displayCurrentRevenue - currentExpenses
-  const previousNetProfit = previousNetProfitFromXero !== undefined && previousNetProfitFromXero !== 0
-    ? previousNetProfitFromXero 
-    : displayPreviousRevenue - previousExpenses
-
-  const currentNetProfitMargin = displayCurrentRevenue > 0 ? (currentNetProfit / displayCurrentRevenue) * 100 : 0
-  const previousNetProfitMargin = displayPreviousRevenue > 0 ? (previousNetProfit / displayPreviousRevenue) * 100 : 0
+  const yearAgoWages = yearAgoPnl?.categories?.wages || 0
+  const yearAgoCogs = yearAgoPnl?.categories?.cogs || 0
+  const yearAgoSecurity = yearAgoPnl?.categories?.security || 0
 
   // Calculate cost percentages (costs as % of revenue)
   const currentWagesPercent = displayCurrentRevenue > 0 ? (currentWages / displayCurrentRevenue) * 100 : 0
@@ -619,21 +662,46 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const previousCogsPercent = displayPreviousRevenue > 0 ? (previousCogs / displayPreviousRevenue) * 100 : 0
   const previousSecurityPercent = displayPreviousRevenue > 0 ? (previousSecurity / displayPreviousRevenue) * 100 : 0
 
+  const yearAgoWagesPercent = displayYearAgoRevenue > 0 ? (yearAgoWages / displayYearAgoRevenue) * 100 : 0
+  const yearAgoCogsPercent = displayYearAgoRevenue > 0 ? (yearAgoCogs / displayYearAgoRevenue) * 100 : 0
+  const yearAgoSecurityPercent = displayYearAgoRevenue > 0 ? (yearAgoSecurity / displayYearAgoRevenue) * 100 : 0
+
   // Spend per head in dollars (GST-inclusive for customer-facing metric)
-  const currentSpendPerHead = currentMetrics.attendance > 0 
-    ? (currentRevenueCents / 100) / currentMetrics.attendance 
+  const currentSpendPerHead = currentMetrics.attendance > 0
+    ? (currentRevenueCents / 100) / currentMetrics.attendance
+    : 0
+  const previousSpendPerHead = previousMetrics.attendance > 0
+    ? (previousRevenueCents / 100) / previousMetrics.attendance
+    : 0
+  const yearAgoSpendPerHead = yearAgoMetrics.attendance > 0
+    ? (yearAgoRevenueCents / 100) / yearAgoMetrics.attendance
     : 0
 
-  // Calculate changes
+  // Calculate week-over-week changes
   const revenuePercent = calculatePercentChange(displayCurrentRevenue, displayPreviousRevenue)
-  const netProfitPercent = calculatePercentChange(currentNetProfit, previousNetProfit)
-  const wagesPercentChange = currentWagesPercent - previousWagesPercent  // Absolute change in percentage points
+  const wagesPercentChange = currentWagesPercent - previousWagesPercent
   const cogsPercentChange = currentCogsPercent - previousCogsPercent
   const securityPercentChange = currentSecurityPercent - previousSecurityPercent
+  const attendancePercent = calculatePercentChange(currentMetrics.attendance, previousMetrics.attendance)
+  const spendPerHeadPercent = calculatePercentChange(currentSpendPerHead, previousSpendPerHead)
+
+  // Calculate year-over-year changes
+  const revenueYoY = calculatePercentChange(displayCurrentRevenue, displayYearAgoRevenue)
+  const wagesYoY = currentWagesPercent - yearAgoWagesPercent
+  const cogsYoY = currentCogsPercent - yearAgoCogsPercent
+  const securityYoY = currentSecurityPercent - yearAgoSecurityPercent
+  const attendanceYoY = calculatePercentChange(currentMetrics.attendance, yearAgoMetrics.attendance)
+  const spendPerHeadYoY = calculatePercentChange(currentSpendPerHead, yearAgoSpendPerHead)
+
+  // Calculate Saturday labels for each period
+  const saturdayLabels = {
+    current: getSaturdayLabel(dateRanges.currentStart, dateRanges.currentEnd),
+    previous: getSaturdayLabel(dateRanges.previousStart, dateRanges.previousEnd),
+    yearAgo: getSaturdayLabel(dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
+  }
 
   console.log('Business Performance Data:', {
     displayCurrentRevenue,
-    currentNetProfit,
     currentWages,
     currentCogs,
     currentSecurity,
@@ -647,10 +715,9 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
       start: formatDate(dateRanges.currentStart),
       end: formatDate(dateRanges.currentEnd),
     },
+    saturdayLabels,
     current: {
       revenue: Math.round(displayCurrentRevenue * 100), // Store as cents for formatCurrency
-      netProfit: Math.round(currentNetProfit * 100),
-      netProfitMargin: currentNetProfitMargin,
       wages: Math.round(currentWages * 100),
       wagesPercent: currentWagesPercent,
       cogs: Math.round(currentCogs * 100),
@@ -662,163 +729,262 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
     },
     previous: {
       revenue: Math.round(displayPreviousRevenue * 100),
-      netProfit: Math.round(previousNetProfit * 100),
-      netProfitMargin: previousNetProfitMargin,
       wages: Math.round(previousWages * 100),
       wagesPercent: previousWagesPercent,
       cogs: Math.round(previousCogs * 100),
       cogsPercent: previousCogsPercent,
       security: Math.round(previousSecurity * 100),
       securityPercent: previousSecurityPercent,
+      attendance: previousMetrics.attendance,
+      spendPerHead: Math.round(previousSpendPerHead * 100),
+    },
+    yearAgo: {
+      revenue: Math.round(displayYearAgoRevenue * 100),
+      wages: Math.round(yearAgoWages * 100),
+      wagesPercent: yearAgoWagesPercent,
+      cogs: Math.round(yearAgoCogs * 100),
+      cogsPercent: yearAgoCogsPercent,
+      security: Math.round(yearAgoSecurity * 100),
+      securityPercent: yearAgoSecurityPercent,
+      attendance: yearAgoMetrics.attendance,
+      spendPerHead: Math.round(yearAgoSpendPerHead * 100),
     },
     changes: {
       revenuePercent,
-      netProfitPercent,
+      revenueYoY,
       wagesPercentChange,
+      wagesYoY,
       cogsPercentChange,
+      cogsYoY,
       securityPercentChange,
+      securityYoY,
+      attendancePercent,
+      attendanceYoY,
+      spendPerHeadPercent,
+      spendPerHeadYoY,
     },
   }
 }
 
 function generateWhatsAppMessage(data: BusinessPerformanceData): string {
-  return `📊 Business Performance (${data.period.start} - ${data.period.end})
+  return `Weekly Performance Report
 
-Revenue: ${formatCurrency(data.current.revenue)} (${formatPercent(data.changes.revenuePercent)})
-Net Profit: ${formatCurrency(data.current.netProfit)} (${data.current.netProfitMargin.toFixed(1)}% margin)
-Wages: ${data.current.wagesPercent.toFixed(1)}% of revenue
-COGS: ${data.current.cogsPercent.toFixed(1)}% of revenue
-Security: ${data.current.securityPercent.toFixed(1)}% of revenue`
+${data.saturdayLabels.current}
+Revenue - ${formatCurrency(data.current.revenue)} (ex GST)
+Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}% of revenue)
+COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}% of revenue)
+Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}% of revenue)
+Attendance - ${data.current.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.current.spendPerHead)}
+
+${data.saturdayLabels.previous}
+Revenue - ${formatCurrency(data.previous.revenue)}
+Wages - ${formatCurrency(data.previous.wages)} (${data.previous.wagesPercent.toFixed(1)}%)
+COGS - ${formatCurrency(data.previous.cogs)} (${data.previous.cogsPercent.toFixed(1)}%)
+Security - ${formatCurrency(data.previous.security)} (${data.previous.securityPercent.toFixed(1)}%)
+Attendance - ${data.previous.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.previous.spendPerHead)}
+
+${data.saturdayLabels.yearAgo}
+Revenue - ${formatCurrency(data.yearAgo.revenue)}
+Wages - ${formatCurrency(data.yearAgo.wages)} (${data.yearAgo.wagesPercent.toFixed(1)}%)
+COGS - ${formatCurrency(data.yearAgo.cogs)} (${data.yearAgo.cogsPercent.toFixed(1)}%)
+Security - ${formatCurrency(data.yearAgo.security)} (${data.yearAgo.securityPercent.toFixed(1)}%)
+Attendance - ${data.yearAgo.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.yearAgo.spendPerHead)}`
 }
 
-async function generateAIEmail(data: BusinessPerformanceData): Promise<string> {
-  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-
-  if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY not configured')
+function getOrdinalSuffix(day: number): string {
+  if (day >= 11 && day <= 13) return 'th'
+  switch (day % 10) {
+    case 1: return 'st'
+    case 2: return 'nd'
+    case 3: return 'rd'
+    default: return 'th'
   }
+}
 
-  const prompt = `You are a nightlife venue financial analyst providing weekly business performance insights.
-
-Analyze the following P&L data and create a comprehensive HTML email report:
-
-**Current Week (${data.period.start} - ${data.period.end}):**
-- Revenue: ${formatCurrency(data.current.revenue)}
-- Net Profit: ${formatCurrency(data.current.netProfit)} (${data.current.netProfitMargin.toFixed(1)}% margin)
-- Wages: ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}% of revenue)
-- COGS: ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}% of revenue)
-- Security: ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}% of revenue)
-- Attendance: ${data.current.attendance} people
-- Spend per Head: ${formatCurrency(data.current.spendPerHead)}
-
-**Previous Week Comparison:**
-- Revenue: ${formatCurrency(data.previous.revenue)} (${formatPercent(data.changes.revenuePercent)})
-- Net Profit: ${formatCurrency(data.previous.netProfit)} (${data.previous.netProfitMargin.toFixed(1)}% margin, ${formatPercent(data.changes.netProfitPercent)})
-- Wages: ${data.previous.wagesPercent.toFixed(1)}% of revenue (${formatPercent(data.changes.wagesPercentChange)})
-- COGS: ${data.previous.cogsPercent.toFixed(1)}% of revenue (${formatPercent(data.changes.cogsPercentChange)})
-- Security: ${data.previous.securityPercent.toFixed(1)}% of revenue (${formatPercent(data.changes.securityPercentChange)})
-
-CRITICAL: Return ONLY the HTML code with NO markdown code blocks, NO explanations, NO \`\`\`html tags. Start directly with the HTML.
-
-Structure the email as:
-
-1. **Header Section**: 
-   - Title: "Weekly Business Performance Report" (large, bold, black color)
-   - Date range subtitle (${data.period.start} - ${data.period.end})
-
-2. **Executive Summary** (2-3 sentences on overall financial health and key trends)
-
-3. **P&L Metrics Table** with columns:
-   - Metric name
-   - Current Week value
-   - % of Revenue (for costs)
-   - Previous Week comparison
-   - Change indicator
-   
-   Include these rows: Revenue, Net Profit (with margin %), Wages, COGS, Security
-
-4. **Cost Efficiency Analysis**
-   - Are wages/COGS/security percentages trending well?
-   - Which costs are under control vs need attention?
-   - Profit margin health assessment
-
-5. **Operational Insights**
-   - Attendance vs revenue relationship
-   - Spend per head trends
-   - Overall business efficiency
-
-6. **Strategic Recommendations** (2-3 specific, actionable suggestions for cost management or revenue optimization)
-
-7. **Call-to-Action Button**: "View Full Dashboard" linking to ${DASHBOARD_URL}
-
-**Styling Guidelines - Clean Professional Look:**
-- **Background**: #ffffff (white) for body
-- **Text Colors**: 
-  - Section Headers: #1e293b (dark slate, bold, large)
-  - Body text: #334155 (slate gray)
-  - Secondary text: #64748b (muted gray)
-- **Table Styling**: 
-  - Header row: #475569 (slate gray) background with #ffffff (white) text
-  - Data rows: Alternating #f8fafc and #ffffff backgrounds with #334155 text
-  - Borders: #e2e8f0 (light gray border)
-- **Visual Indicators**: ✅ for positive trends, ⚠️ for concerning trends
-- **Color Coding for Changes**: 
-  - Positive (revenue/profit up, costs down): #16a34a (green)
-  - Negative (revenue/profit down, costs up): #dc2626 (red)  
-  - Neutral: #64748b (gray)
-- **CTA Button**: Background #f97316 (orange), #ffffff (white) text color, rounded corners, no gradient
-- **Typography**: Use system fonts (-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto)
-- Mobile-responsive design
-- Keep under 500 words
-- DO NOT use dark backgrounds
-
-**Tone:** Professional and analytical. Focus on financial efficiency and cost management insights.
-
-Remember: Return ONLY HTML code, no markdown formatting or explanations.`
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a venue financial analyst. Generate professional HTML email reports with P&L insights and cost analysis. Return ONLY raw HTML code with no markdown formatting, no code blocks, and no explanations.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      console.error('OpenAI API error:', error)
-      throw new Error('Failed to generate AI email')
+/**
+ * Get the Saturday date from a period's date range and format as "Saturday 17th January 2026"
+ */
+function formatSaturdaySubtitle(startDate: Date, endDate: Date): string {
+  const current = new Date(startDate)
+  while (current <= endDate) {
+    if (current.getDay() === 6) {
+      const day = current.getDate()
+      const suffix = getOrdinalSuffix(day)
+      const month = current.toLocaleDateString('en-AU', { month: 'long' })
+      const year = current.getFullYear()
+      return `Saturday ${day}${suffix} ${month} ${year}`
     }
-
-    const result = await response.json()
-    let htmlContent = result.choices[0].message.content
-    
-    // Clean up any markdown artifacts
-    htmlContent = htmlContent.replace(/^```html\n?/i, '')
-    htmlContent = htmlContent.replace(/\n?```\s*$/i, '')
-    htmlContent = htmlContent.trim()
-    
-    return htmlContent
-  } catch (error) {
-    console.error('Error generating AI email:', error)
-    throw error
+    current.setDate(current.getDate() + 1)
   }
+  // Fallback
+  const d = endDate
+  const day = d.getDate()
+  const suffix = getOrdinalSuffix(day)
+  const month = d.toLocaleDateString('en-AU', { month: 'long' })
+  const year = d.getFullYear()
+  return `Saturday ${day}${suffix} ${month} ${year}`
+}
+
+/**
+ * Generate a directional indicator HTML snippet
+ * @param change - The change value (% or pp)
+ * @param invertDirection - If true, negative change = good (for cost metrics)
+ * @param unit - 'percent' for %, 'pp' for percentage points
+ * @param isAvailable - Whether comparison data is available
+ */
+function generateIndicator(change: number, invertDirection: boolean, unit: 'percent' | 'pp', isAvailable: boolean): string {
+  if (!isAvailable) {
+    return `<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-align:center;line-height:20px;font-size:12px;vertical-align:middle;">&#8211;</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#94a3b8;margin-left:6px;vertical-align:middle;">n/a</span>`
+  }
+
+  const isPositiveChange = change > 0
+  const isNegativeChange = change < 0
+  const isNeutral = change === 0
+
+  // Determine if this change is "good" or "bad"
+  let isGood: boolean
+  if (isNeutral) {
+    isGood = true // neutral
+  } else if (invertDirection) {
+    // For costs: decrease = good, increase = bad
+    isGood = isNegativeChange
+  } else {
+    // For revenue/attendance: increase = good, decrease = bad
+    isGood = isPositiveChange
+  }
+
+  let arrowChar: string
+  let arrowBg: string
+  let arrowColor: string
+
+  if (isNeutral) {
+    arrowChar = '&#8211;'
+    arrowBg = '#f1f5f9'
+    arrowColor = '#94a3b8'
+  } else if (isGood) {
+    arrowChar = '&#8593;'
+    arrowBg = '#dcfce7'
+    arrowColor = '#16a34a'
+  } else {
+    arrowChar = '&#8595;'
+    arrowBg = '#fee2e2'
+    arrowColor = '#dc2626'
+  }
+
+  const sign = change > 0 ? '+' : ''
+  const suffix = unit === 'pp' ? 'pp' : '%'
+  const displayValue = `${sign}${change.toFixed(1)}${suffix}`
+
+  return `<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${arrowBg};color:${arrowColor};text-align:center;line-height:20px;font-size:12px;vertical-align:middle;">${arrowChar}</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#1a1a2e;margin-left:6px;vertical-align:middle;">${displayValue}</span>`
+}
+
+function generateEmailHtml(data: BusinessPerformanceData): string {
+  const dateRanges = calculateDateRanges()
+  const subtitle = formatSaturdaySubtitle(dateRanges.currentStart, dateRanges.currentEnd)
+
+  // Determine data availability for YoY (if year-ago revenue is 0 and current isn't, likely no data)
+  const yearAgoRevenueAvailable = data.yearAgo.revenue > 0 || data.current.revenue === 0
+  const yearAgoAttendanceAvailable = data.yearAgo.attendance > 0 || data.current.attendance === 0
+  const yearAgoSpendAvailable = data.yearAgo.spendPerHead > 0 || data.current.spendPerHead === 0
+  // For cost metrics, check if year-ago revenue exists (needed for percentage calculation)
+  const yearAgoCostDataAvailable = yearAgoRevenueAvailable
+
+  // Build table rows
+  const rows = [
+    {
+      metric: 'Revenue (ex GST)',
+      value: formatCurrency(data.current.revenue),
+      valueSuffix: '',
+      wow: generateIndicator(data.changes.revenuePercent, false, 'percent', true),
+      yoy: generateIndicator(data.changes.revenueYoY, false, 'percent', yearAgoRevenueAvailable),
+    },
+    {
+      metric: 'Wages',
+      value: formatCurrency(data.current.wages),
+      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.wagesPercent.toFixed(1)}%)</span>`,
+      wow: generateIndicator(data.changes.wagesPercentChange, true, 'pp', true),
+      yoy: generateIndicator(data.changes.wagesYoY, true, 'pp', yearAgoCostDataAvailable),
+    },
+    {
+      metric: 'COGS',
+      value: formatCurrency(data.current.cogs),
+      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.cogsPercent.toFixed(1)}%)</span>`,
+      wow: generateIndicator(data.changes.cogsPercentChange, true, 'pp', true),
+      yoy: generateIndicator(data.changes.cogsYoY, true, 'pp', yearAgoCostDataAvailable),
+    },
+    {
+      metric: 'Security',
+      value: formatCurrency(data.current.security),
+      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.securityPercent.toFixed(1)}%)</span>`,
+      wow: generateIndicator(data.changes.securityPercentChange, true, 'pp', true),
+      yoy: generateIndicator(data.changes.securityYoY, true, 'pp', yearAgoCostDataAvailable),
+    },
+    {
+      metric: 'Attendance',
+      value: data.current.attendance.toLocaleString(),
+      valueSuffix: '',
+      wow: generateIndicator(data.changes.attendancePercent, false, 'percent', true),
+      yoy: generateIndicator(data.changes.attendanceYoY, false, 'percent', yearAgoAttendanceAvailable),
+    },
+    {
+      metric: 'Spend Per Head',
+      value: formatCurrency(data.current.spendPerHead),
+      valueSuffix: '',
+      wow: generateIndicator(data.changes.spendPerHeadPercent, false, 'percent', true),
+      yoy: generateIndicator(data.changes.spendPerHeadYoY, false, 'percent', yearAgoSpendAvailable),
+    },
+  ]
+
+  const tableRows = rows.map((row, index) => {
+    const isLast = index === rows.length - 1
+    const borderStyle = isLast ? 'border:none;' : 'border-bottom:1px solid #f1f5f9;'
+    return `<tr>
+      <td style="padding:14px 16px;${borderStyle}font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-weight:600;font-size:14px;color:#1a1a2e;">${row.metric}</td>
+      <td style="padding:14px 16px;${borderStyle}font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#1a1a2e;">${row.value}${row.valueSuffix}</td>
+      <td style="padding:14px 16px;${borderStyle}">${row.wow}</td>
+      <td style="padding:14px 16px;${borderStyle}">${row.yoy}</td>
+    </tr>`
+  }).join('\n')
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background-color:#f0f2f5;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f0f2f5;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="700" cellspacing="0" cellpadding="0" style="max-width:700px;width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08),0 8px 24px rgba(0,0,0,0.04);">
+<tr><td style="padding:32px;">
+
+<h1 style="margin:0 0 8px 0;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-size:20px;font-weight:700;color:#1a1a2e;">Weekly Performance Report</h1>
+<p style="margin:0 0 24px 0;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:500;color:#94a3b8;">${subtitle}</p>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+<thead>
+<tr style="background-color:#f8fafc;">
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">Metric</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">This Week</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Week</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Year</th>
+</tr>
+</thead>
+<tbody>
+${tableRows}
+</tbody>
+</table>
+
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
 }
 
 async function sendWhatsAppMessage(phoneNumber: string, message: string): Promise<boolean> {
@@ -963,7 +1129,7 @@ serve(async (req: Request) => {
     // If preview mode, generate email content and return without sending
     if (previewOnly) {
       console.log('Preview mode - generating content without sending...')
-      const emailHtml = await generateAIEmail(performanceData)
+      const emailHtml = generateEmailHtml(performanceData)
       
       return json({
         success: true,
@@ -1007,9 +1173,9 @@ serve(async (req: Request) => {
     // Generate and send emails (only if not in WhatsApp-only test mode)
     const emailResults: { recipient: string; success: boolean }[] = []
     if (!testWhatsAppOnly && notificationSettings.recipient_emails && notificationSettings.recipient_emails.length > 0) {
-      console.log('Generating AI email content...')
-      const emailHtml = await generateAIEmail(performanceData)
-      const subject = `Business Performance Report: ${performanceData.period.start} - ${performanceData.period.end}`
+      console.log('Generating email HTML...')
+      const emailHtml = generateEmailHtml(performanceData)
+      const subject = `Weekly Performance Report - ${performanceData.saturdayLabels.current.replace('Saturday - ', '')}`
 
       for (const email of notificationSettings.recipient_emails) {
         console.log(`Sending email to ${email}...`)
