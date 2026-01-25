@@ -312,7 +312,9 @@ function parseXeroPnl(data: any, startDate: string, endDate: string): any {
         walk(r.Rows || [], r.Title || sectionName)
       } else if (r.RowType === 'Row' && r.Cells) {
         const label = (r.Cells[0]?.Value || '').toLowerCase()
-        const amount = parseAmount(r.Cells[1]?.Value)
+        // Pick the last non-null cell as the amount (matches backend logic)
+        const lastCell = [...r.Cells].reverse().find((c: any) => c && c.Value != null)
+        const amount = parseAmount(lastCell?.Value)
 
         // Skip summary/total rows
         if (label === 'gross profit' || label === 'net profit' || label.startsWith('total ')) {
