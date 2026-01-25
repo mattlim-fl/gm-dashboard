@@ -49,10 +49,12 @@ interface WeeklySummaryData {
     doorRevenuePercent: number
     totalRevenuePercent: number
     attendancePercent: number
+    spendPerHeadPercent: number
     barRevenueYoY: number
     doorRevenueYoY: number
     totalRevenueYoY: number
     attendanceYoY: number
+    spendPerHeadYoY: number
   }
 }
 
@@ -265,11 +267,13 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
   const doorRevenuePercent = calculatePercentChange(currentMetrics.doorRevenue, previousMetrics.doorRevenue)
   const totalRevenuePercent = calculatePercentChange(currentMetrics.revenue, previousMetrics.revenue)
   const attendancePercent = calculatePercentChange(currentMetrics.attendance, previousMetrics.attendance)
+  const spendPerHeadPercent = calculatePercentChange(currentSpendPerHead, previousSpendPerHead)
 
   const barRevenueYoY = calculatePercentChange(currentMetrics.barRevenue, yearAgoMetrics.barRevenue)
   const doorRevenueYoY = calculatePercentChange(currentMetrics.doorRevenue, yearAgoMetrics.doorRevenue)
   const totalRevenueYoY = calculatePercentChange(currentMetrics.revenue, yearAgoMetrics.revenue)
   const attendanceYoY = calculatePercentChange(currentMetrics.attendance, yearAgoMetrics.attendance)
+  const spendPerHeadYoY = calculatePercentChange(currentSpendPerHead, yearAgoSpendPerHead)
 
   return {
     period: {
@@ -303,10 +307,12 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
       doorRevenuePercent,
       totalRevenuePercent,
       attendancePercent,
+      spendPerHeadPercent,
       barRevenueYoY,
       doorRevenueYoY,
       totalRevenueYoY,
       attendanceYoY,
+      spendPerHeadYoY,
     },
   }
 }
@@ -378,95 +384,168 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string): Promis
   }
 }
 
-async function generateAIEmail(data: WeeklySummaryData): Promise<string> {
-  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-
-  if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY not configured')
+function getOrdinalSuffix(day: number): string {
+  if (day >= 11 && day <= 13) return 'th'
+  switch (day % 10) {
+    case 1: return 'st'
+    case 2: return 'nd'
+    case 3: return 'rd'
+    default: return 'th'
   }
+}
 
-  const prompt = `Format the following venue performance data as a clean HTML email table.
-
-Title: "Weekly Trade Report"
-
-Data to display in a table with 3 columns:
-
-Column headers: ${data.saturdayLabels.current} | ${data.saturdayLabels.previous} | ${data.saturdayLabels.yearAgo}
-
-Rows:
-- Bar Revenue (ex GST): ${formatCurrency(data.current.barRevenue)} | ${formatCurrency(data.previousWeek.barRevenue)} | ${formatCurrency(data.yearAgo.barRevenue)}
-- Door Revenue (ex GST): ${formatCurrency(data.current.doorRevenue)} | ${formatCurrency(data.previousWeek.doorRevenue)} | ${formatCurrency(data.yearAgo.doorRevenue)}
-- Total Revenue (ex GST): ${formatCurrency(data.current.totalRevenue)} | ${formatCurrency(data.previousWeek.totalRevenue)} | ${formatCurrency(data.yearAgo.totalRevenue)}
-- Attendance: ${data.current.attendance.toLocaleString()} | ${data.previousWeek.attendance.toLocaleString()} | ${data.yearAgo.attendance.toLocaleString()}
-- Spend Per Head: ${formatCurrency(data.current.spendPerHead)} | ${formatCurrency(data.previousWeek.spendPerHead)} | ${formatCurrency(data.yearAgo.spendPerHead)}
-
-CRITICAL: Return ONLY the HTML code. No markdown, no code blocks, no explanations.
-
-Requirements:
-- Title "Weekly Trade Report" as a header
-- A single data table with the rows and columns above
-- The first column in the table should be the metric name (Bar Revenue, Door Revenue, etc.)
-- NO executive summary, NO analysis, NO recommendations, NO commentary, NO CTA button
-- NO date range subtitle, NO descriptive text
-- Just the title and the data table, nothing else
-
-Styling:
-- Background: #ffffff
-- Title: #1e293b, bold, large, centered
-- Table header row: #475569 background, #ffffff text, font-size 13px
-- Data rows: alternating #f8fafc and #ffffff, text #334155
-- Metric name column: bold
-- Borders: #e2e8f0
-- Typography: system fonts (-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto)
-- Mobile-responsive (table width 100%)
-- Clean, minimal design
-- Padding: 12px in cells
-
-Return ONLY HTML code.`
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a data formatter. Generate clean, simple HTML email tables displaying venue performance data. Return ONLY raw HTML code with no markdown formatting, no code blocks, and no explanations. Do NOT include any analysis, commentary, recommendations, or insights.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 1000,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      console.error('OpenAI API error:', error)
-      throw new Error('Failed to generate AI email')
+/**
+ * Get the Saturday date from a period's date range and format as "Saturday 17th January 2026"
+ */
+function formatSaturdaySubtitle(startDate: Date, endDate: Date): string {
+  const current = new Date(startDate)
+  while (current <= endDate) {
+    if (current.getDay() === 6) {
+      const day = current.getDate()
+      const suffix = getOrdinalSuffix(day)
+      const month = current.toLocaleDateString('en-AU', { month: 'long' })
+      const year = current.getFullYear()
+      return `Saturday ${day}${suffix} ${month} ${year}`
     }
-
-    const result = await response.json()
-    let htmlContent = result.choices[0].message.content
-    
-    // Clean up any markdown artifacts
-    htmlContent = htmlContent.replace(/^```html\n?/i, '')  // Remove opening ```html
-    htmlContent = htmlContent.replace(/\n?```\s*$/i, '')   // Remove closing ```
-    htmlContent = htmlContent.trim()
-    
-    return htmlContent
-  } catch (error) {
-    console.error('Error generating AI email:', error)
-    throw error
+    current.setDate(current.getDate() + 1)
   }
+  // Fallback
+  const d = endDate
+  const day = d.getDate()
+  const suffix = getOrdinalSuffix(day)
+  const month = d.toLocaleDateString('en-AU', { month: 'long' })
+  const year = d.getFullYear()
+  return `Saturday ${day}${suffix} ${month} ${year}`
+}
+
+/**
+ * Generate a directional indicator HTML snippet
+ * @param change - The change value (%)
+ * @param isAvailable - Whether comparison data is available
+ */
+function generateIndicator(change: number, isAvailable: boolean): string {
+  if (!isAvailable) {
+    return `<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-align:center;line-height:20px;font-size:12px;vertical-align:middle;">&#8211;</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#94a3b8;margin-left:6px;vertical-align:middle;">n/a</span>`
+  }
+
+  const isPositive = change > 0
+  const isNegative = change < 0
+  const isNeutral = change === 0
+
+  let arrowChar: string
+  let arrowBg: string
+  let arrowColor: string
+
+  if (isNeutral) {
+    arrowChar = '&#8211;'
+    arrowBg = '#f1f5f9'
+    arrowColor = '#94a3b8'
+  } else if (isPositive) {
+    arrowChar = '&#8593;'
+    arrowBg = '#dcfce7'
+    arrowColor = '#16a34a'
+  } else {
+    arrowChar = '&#8595;'
+    arrowBg = '#fee2e2'
+    arrowColor = '#dc2626'
+  }
+
+  const sign = change > 0 ? '+' : ''
+  const displayValue = `${sign}${change.toFixed(1)}%`
+
+  return `<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${arrowBg};color:${arrowColor};text-align:center;line-height:20px;font-size:12px;vertical-align:middle;">${arrowChar}</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#1a1a2e;margin-left:6px;vertical-align:middle;">${displayValue}</span>`
+}
+
+function generateEmailHtml(data: WeeklySummaryData): string {
+  const dateRanges = calculateDateRanges()
+  const subtitle = formatSaturdaySubtitle(dateRanges.currentWeekStart, dateRanges.currentWeekEnd)
+
+  // Determine data availability for YoY
+  const yearAgoRevenueAvailable = data.yearAgo.totalRevenue > 0 || data.current.totalRevenue === 0
+  const yearAgoAttendanceAvailable = data.yearAgo.attendance > 0 || data.current.attendance === 0
+  const yearAgoSpendAvailable = data.yearAgo.spendPerHead > 0 || data.current.spendPerHead === 0
+
+  // Build table rows - all metrics are "positive = good"
+  const rows = [
+    {
+      metric: 'Bar Revenue (ex GST)',
+      value: formatCurrency(data.current.barRevenue),
+      wow: generateIndicator(data.changes.barRevenuePercent, true),
+      yoy: generateIndicator(data.changes.barRevenueYoY, yearAgoRevenueAvailable),
+    },
+    {
+      metric: 'Door Revenue (ex GST)',
+      value: formatCurrency(data.current.doorRevenue),
+      wow: generateIndicator(data.changes.doorRevenuePercent, true),
+      yoy: generateIndicator(data.changes.doorRevenueYoY, yearAgoRevenueAvailable),
+    },
+    {
+      metric: 'Total Revenue (ex GST)',
+      value: formatCurrency(data.current.totalRevenue),
+      wow: generateIndicator(data.changes.totalRevenuePercent, true),
+      yoy: generateIndicator(data.changes.totalRevenueYoY, yearAgoRevenueAvailable),
+    },
+    {
+      metric: 'Attendance',
+      value: data.current.attendance.toLocaleString(),
+      wow: generateIndicator(data.changes.attendancePercent, true),
+      yoy: generateIndicator(data.changes.attendanceYoY, yearAgoAttendanceAvailable),
+    },
+    {
+      metric: 'Spend Per Head',
+      value: formatCurrency(data.current.spendPerHead),
+      wow: generateIndicator(data.changes.spendPerHeadPercent, true),
+      yoy: generateIndicator(data.changes.spendPerHeadYoY, yearAgoSpendAvailable),
+    },
+  ]
+
+  const tableRows = rows.map((row, index) => {
+    const isLast = index === rows.length - 1
+    const borderStyle = isLast ? 'border:none;' : 'border-bottom:1px solid #f1f5f9;'
+    return `<tr>
+      <td style="padding:14px 16px;${borderStyle}font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-weight:600;font-size:14px;color:#1a1a2e;">${row.metric}</td>
+      <td style="padding:14px 16px;${borderStyle}font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#1a1a2e;">${row.value}</td>
+      <td style="padding:14px 16px;${borderStyle}">${row.wow}</td>
+      <td style="padding:14px 16px;${borderStyle}">${row.yoy}</td>
+    </tr>`
+  }).join('\n')
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background-color:#f0f2f5;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f0f2f5;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="700" cellspacing="0" cellpadding="0" style="max-width:700px;width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08),0 8px 24px rgba(0,0,0,0.04);">
+<tr><td style="padding:32px;">
+
+<h1 style="margin:0 0 8px 0;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-size:20px;font-weight:700;color:#1a1a2e;">Weekly Trade Report</h1>
+<p style="margin:0 0 24px 0;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:500;color:#94a3b8;">${subtitle}</p>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+<thead>
+<tr style="background-color:#f8fafc;">
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">Metric</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">This Week</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Week</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Year</th>
+</tr>
+</thead>
+<tbody>
+${tableRows}
+</tbody>
+</table>
+
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
 }
 
 async function sendEmail(supabase: any, to: string, subject: string, html: string): Promise<boolean> {
@@ -569,7 +648,7 @@ serve(async (req: Request) => {
     // If preview mode, generate email content and return without sending
     if (previewOnly) {
       console.log('Preview mode - generating content without sending...')
-      const emailHtml = await generateAIEmail(summaryData)
+      const emailHtml = generateEmailHtml(summaryData)
       
       return json({
         success: true,
@@ -613,8 +692,8 @@ serve(async (req: Request) => {
     // Generate and send emails (only if not in WhatsApp-only test mode)
     const emailResults: { recipient: string; success: boolean }[] = []
     if (!testWhatsAppOnly && notificationSettings.recipient_emails && notificationSettings.recipient_emails.length > 0) {
-      console.log('Generating AI email content...')
-      const emailHtml = await generateAIEmail(summaryData)
+      console.log('Generating email content...')
+      const emailHtml = generateEmailHtml(summaryData)
       const subject = `Weekly Trade Report - ${summaryData.saturdayLabels.current.replace('Saturday - ', '')}`
 
       for (const email of notificationSettings.recipient_emails) {
