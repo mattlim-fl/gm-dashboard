@@ -16,6 +16,15 @@ type PnlChartPoint = {
   other: number;
 };
 
+type PercentageChartPoint = {
+  period: string;
+  cogs: number;
+  wages: number;
+  security: number;
+  other: number;
+  _original: PnlChartPoint;
+};
+
 interface PnlComparisonChartProps {
   data: PnlChartPoint[];
   currentLabel: string;
@@ -50,15 +59,40 @@ export function PnlComparisonChart({
 }: PnlComparisonChartProps) {
   const hasData = data && data.length > 0;
 
+  // Transform data to percentages for 100% stacked bar chart
+  const percentageData: PercentageChartPoint[] = hasData
+    ? data.map((point) => {
+        const total = point.cogs + point.wages + point.security + point.other;
+        if (total === 0) {
+          return {
+            period: point.period,
+            cogs: 0,
+            wages: 0,
+            security: 0,
+            other: 0,
+            _original: point,
+          };
+        }
+        return {
+          period: point.period,
+          cogs: (point.cogs / total) * 100,
+          wages: (point.wages / total) * 100,
+          security: (point.security / total) * 100,
+          other: (point.other / total) * 100,
+          _original: point,
+        };
+      })
+    : [];
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cost Breakdown Comparison</CardTitle>
+        <CardTitle>Cost Breakdown by Category</CardTitle>
       </CardHeader>
       <CardContent>
         {hasData ? (
           <ChartContainer config={chartConfig} className="h-80 w-full">
-            <BarChart data={data}>
+            <BarChart data={percentageData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey="period"
@@ -70,28 +104,24 @@ export function PnlComparisonChart({
                 tick={{ fontSize: 12 }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) => formatCurrency(value as number)}
+                domain={[0, 100]}
+                tickFormatter={(value) => `${value}%`}
               />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
                     formatter={(value, name, _item, _index, payload) => {
-                      const point = payload as PnlChartPoint;
-                      const total =
-                        (point.cogs || 0) +
-                        (point.wages || 0) +
-                        (point.security || 0) +
-                        (point.other || 0);
+                      const point = payload as PercentageChartPoint;
+                      const original = point._original;
+                      const categoryKey = String(name).toLowerCase() as keyof typeof original;
+                      const absoluteValue = original?.[categoryKey] ?? 0;
                       return (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
                           <span className="font-mono">
-                            {formatCurrency(value as number)}{" "}
-                            <span className="ml-1 text-muted-foreground text-[0.7rem]">
-                              {name}
-                            </span>
+                            {(value as number).toFixed(1)}%
                           </span>
-                          <span className="text-[0.7rem] text-muted-foreground">
-                            Total: {formatCurrency(total)}
+                          <span className="text-muted-foreground text-[0.7rem]">
+                            ({formatCurrency(absoluteValue as number)})
                           </span>
                         </div>
                       );
