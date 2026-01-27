@@ -65,6 +65,13 @@ function getComparisonPeriods(daysBack: number, comparisonType: ComparisonType) 
     const yearEnd = new Date(currentEndDate);
     yearEnd.setFullYear(yearEnd.getFullYear() - 1);
 
+    // Ensure the range doesn't exceed 364 days (Xero API limit is 365 days,
+    // and leap years can cause year-over-year ranges to span 366 days)
+    const diffInDays = Math.round((yearEnd.getTime() - yearStart.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffInDays > 364) {
+      yearEnd.setTime(yearStart.getTime() + 364 * 24 * 60 * 60 * 1000);
+    }
+
     return {
       current,
       comparison: {
