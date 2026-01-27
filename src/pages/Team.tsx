@@ -9,7 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreHorizontal, Trash2, Plus, UserCog } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables, Enums } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
@@ -293,25 +299,10 @@ export default function Team() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="space-x-2">
+                        <TableCell>
                           <Badge variant={row.role === 'admin' ? 'default' : 'outline'}>
                             {row.role === 'admin' ? 'Admin' : 'User'}
                           </Badge>
-                          {canChangeRole && !isSelf && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={updateRoleMutation.isPending}
-                              onClick={() =>
-                                updateRoleMutation.mutate({
-                                  id: row.id,
-                                  role: row.role === 'admin' ? 'user' : 'admin',
-                                })
-                              }
-                            >
-                              {row.role === 'admin' ? 'Make user' : 'Make admin'}
-                            </Button>
-                          )}
                         </TableCell>
                         <TableCell>
                           {row.created_at
@@ -320,15 +311,40 @@ export default function Team() {
                         </TableCell>
                         <TableCell className="text-right">
                           {isAdminUser && !isOwner && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteMutation.mutate(row.id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                              <span className="sr-only">Remove access</span>
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={updateRoleMutation.isPending || deleteMutation.isPending}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                  <span className="sr-only">Actions</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {!isSelf && (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      updateRoleMutation.mutate({
+                                        id: row.id,
+                                        role: row.role === 'admin' ? 'user' : 'admin',
+                                      })
+                                    }
+                                  >
+                                    <UserCog className="mr-2 h-4 w-4" />
+                                    {row.role === 'admin' ? 'Make user' : 'Make admin'}
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => deleteMutation.mutate(row.id)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Remove access
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
                         </TableCell>
                       </TableRow>
