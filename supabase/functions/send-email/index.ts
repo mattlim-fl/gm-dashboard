@@ -170,12 +170,20 @@ function renderVenueConfirmationHTML(data: Record<string, unknown>): string {
 
 function renderKaraokeConfirmationHTML(data: Record<string, unknown>): string {
   const customerName = String(get(data, 'customerName') ?? '')
+  const customerEmail = String(get(data, 'customerEmail') ?? '')
   const referenceCode = String(get(data, 'referenceCode') ?? '')
   const bookingDate = String(get(data, 'bookingDate') ?? '')
   const startTime = String(get(data, 'startTime') ?? '')
   const endTime = String(get(data, 'endTime') ?? '')
   const guestCount = String(get(data, 'guestCount') ?? '')
+  const boothName = String(get(data, 'boothName') ?? '')
   const guestListUrl = String(get(data, 'guestListUrl') ?? '') || ''
+
+  // Venue-specific values (case-insensitive comparison)
+  const venue = String(get(data, 'venue') ?? 'manor').toLowerCase()
+  const venueDisplayName = venue === 'manor' ? 'Manor' : 'Hippie Club'
+  const instagramHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth'
+  const facebookHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth'
 
   return `
   <!DOCTYPE html>
@@ -183,77 +191,247 @@ function renderKaraokeConfirmationHTML(data: Record<string, unknown>): string {
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Karaoke Booking Confirmation - Manor Perth</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }
-        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1); }
-        .header { text-align: center; margin-bottom: 30px; }
-        .logo { font-size: 28px; font-weight: bold; color: #8B4513; margin-bottom: 10px; }
-        .reference-code { background: linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%); border: 2px solid #dee2e6; border-radius: 12px; padding: 20px; text-align: center; margin: 25px 0; }
-        .reference-code-label { font-size: 14px; font-weight: 600; color: #6c757d; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
-        .reference-code-value { font-size: 24px; font-weight: bold; font-family: 'Courier New', monospace; color: #495057; letter-spacing: 2px; }
-        .booking-details { background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 25px 0; }
-        .detail-row { display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e9ecef; }
-        .detail-row:last-child { border-bottom: none; margin-bottom: 0; }
-        .detail-label { font-weight: 600; color: #495057; }
-        .detail-value { color: #6c757d; }
-        .message { background: #e7f3ff; border-left: 4px solid #007bff; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; }
-        .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e9ecef; color: #6c757d; font-size: 14px; }
-        .karaoke-highlight { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; }
-      </style>
+      <title>Karaoke Booking Confirmation - ${venueDisplayName}</title>
     </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="logo">MANOR</div>
-          <h1 style="margin:0;color:#333;font-size:24px;">Karaoke Booking Confirmed!</h1>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+      <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1);">
+
+        <!-- Subtle header -->
+        <div style="text-align: center; color: #6c757d; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px;">
+          ${venueDisplayName} Karaoke
         </div>
 
-        <div class="karaoke-highlight">
-          <h2 style="margin:0;font-size:20px;">🎤 Your Karaoke Session is Booked!</h2>
+        <!-- Single confirmation message -->
+        <h1 style="margin: 0 0 8px 0; color: #333; font-size: 24px; font-weight: 600; text-align: center;">
+          You're all set, ${customerName}!
+        </h1>
+        <p style="text-align: center; color: #495057; font-size: 16px; margin: 0 0 32px 0;">
+          Your karaoke booth is confirmed for ${bookingDate}.
+        </p>
+
+        <!-- Primary CTA: Add Guest Names -->
+        ${guestListUrl ? `
+        <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); border-radius: 12px; padding: 24px; margin: 0 0 32px 0; text-align: center;">
+          <p style="margin: 0 0 8px 0; color: white; font-size: 18px; font-weight: 600;">
+            Who's joining you?
+          </p>
+          <p style="margin: 0 0 20px 0; color: rgba(255,255,255,0.9); font-size: 14px;">
+            Add your guests now so they're on the door list when they arrive.
+          </p>
+          <a href="${guestListUrl}" style="display: inline-block; background: white; color: #ee5a24; padding: 14px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px;">
+            Add Guest Names
+          </a>
+        </div>
+        ` : ''}
+
+        <!-- Booking Details -->
+        <div style="background: #f8f9fa; border-radius: 12px; padding: 24px; margin: 0 0 32px 0;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Date</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${bookingDate}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Time</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${startTime} - ${endTime}</td>
+            </tr>
+            ${boothName ? `
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Booth</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${boothName}</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Guests</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">Up to ${guestCount} people</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 0; color: #6c757d; font-size: 13px;">Reference</td>
+              <td style="padding: 10px 0; color: #6c757d; font-size: 13px; text-align: right; font-family: 'Courier New', monospace;">${referenceCode}</td>
+            </tr>
+          </table>
         </div>
 
-        <p>Hi ${customerName},</p>
-        <p>Thanks for your Karaoke Booth booking at Manor, here are the details:</p>
-
-        <div class="reference-code">
-          <div class="reference-code-label">Reference Code</div>
-          <div class="reference-code-value">${referenceCode}</div>
-        </div>
-
-        <div class="booking-details">
-          <h3 style="margin-top:0;color:#333;">Booking Details</h3>
-          <div class="detail-row"><span class="detail-label">Date:</span><span class="detail-value">${bookingDate}</span></div>
-          <div class="detail-row"><span class="detail-label">Time:</span><span class="detail-value">${startTime} - ${endTime}</span></div>
-          <div class="detail-row"><span class="detail-label">Capacity:</span><span class="detail-value">${guestCount} people</span></div>
-        </div>
-
-        ${
-          guestListUrl
-            ? `
-        <div class="message">
-          <strong>Curate your guest list</strong><br/>
-          Add the names of your guests so they're on the door when they arrive.
-          <div style="margin-top:16px;text-align:center;">
-            <a href="${guestListUrl}" style="display:inline-block;padding:10px 18px;border-radius:999px;background-color:#0d6efd;color:#fff;text-decoration:none;font-weight:600;">
-              Curate your guest list
-            </a>
+        <!-- On the day instructions -->
+        <div style="margin: 0 0 32px 0;">
+          <h3 style="margin: 0 0 16px 0; color: #333; font-size: 16px; font-weight: 600;">
+            On the day
+          </h3>
+          <div style="background: #fff8e6; border-radius: 8px; padding: 20px; border-left: 4px solid #ffc107;">
+            <p style="margin: 0 0 12px 0; color: #495057;">
+              <strong>1.</strong> Arrive 10 minutes before your booking time
+            </p>
+            <p style="margin: 0 0 12px 0; color: #495057;">
+              <strong>2.</strong> Head to the bar upstairs at ${venueDisplayName} to check in
+            </p>
+            <p style="margin: 0; color: #495057;">
+              <strong>3.</strong> Collect your wristbands and you're ready to sing!
+            </p>
           </div>
         </div>
-        `
-            : ''
-        }
 
-        <p>10 minutes before your booking, head to the bar upstairs at Manor to check in and receive your wristbands.</p>
+        <!-- Tip about guest list entries -->
+        <p style="color: #6c757d; font-size: 14px; margin: 0 0 32px 0; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+          <strong>Tip:</strong> If you purchased guest list entries, they'll arrive by email the day before. Don't want to queue? Message us on Instagram.
+        </p>
 
-        <p>If you have purchased Guest List entries for your group, you will receive them via email the day before your booking.</p>
+        <!-- Friendly sign-off -->
+        <div style="text-align: center; margin: 0 0 32px 0;">
+          <p style="color: #333; font-size: 16px; margin: 0 0 8px 0;">
+            See you soon! 🎤
+          </p>
+          <p style="color: #6c757d; font-size: 14px; margin: 0;">
+            The ${venueDisplayName} Team
+          </p>
+        </div>
 
-        <p>If you haven't purchased any Guest List entries and don't want to miss your booking by getting stuck in line outside, message us on IG or WhatsApp.</p>
+        <!-- Footer with linked socials -->
+        <div style="text-align: center; padding-top: 24px; border-top: 1px solid #e9ecef;">
+          <p style="margin: 0 0 12px 0;">
+            <a href="https://instagram.com/${instagramHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+              Instagram
+            </a>
+            <span style="color: #dee2e6;">|</span>
+            <a href="https://facebook.com/${facebookHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+              Facebook
+            </a>
+          </p>
+          <p style="margin: 16px 0 0 0; font-size: 12px; color: #adb5bd;">
+            This confirmation was sent to ${customerEmail}
+          </p>
+        </div>
+      </div>
+    </body>
+  </html>`
+}
 
-        <p>IG: @manorleederville<br />FB: @manorleederville</p>
+function renderTicketConfirmationHTML(data: Record<string, unknown>): string {
+  const customerName = String(get(data, 'customerName') ?? '')
+  const customerEmail = String(get(data, 'customerEmail') ?? '')
+  const referenceCode = String(get(data, 'referenceCode') ?? '')
+  const bookingDate = String(get(data, 'bookingDate') ?? '')
+  const ticketQuantity = String(get(data, 'ticketQuantity') ?? '1')
+  const guestListUrl = String(get(data, 'guestListUrl') ?? '') || ''
+  const occasionName = String(get(data, 'occasionName') ?? '')
 
-        <div class="footer">
-          <p style="margin-top:20px;font-size:12px;color:#adb5bd;">This email was sent to ${String(get(data, 'customerEmail') ?? '')} to confirm your karaoke booking.</p>
+  // Venue-specific values (case-insensitive comparison)
+  const venue = String(get(data, 'venue') ?? 'manor').toLowerCase()
+  const venueDisplayName = venue === 'manor' ? 'Manor' : 'Hippie Club'
+  const instagramHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth'
+  const facebookHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth'
+
+  const ticketLabel = Number(ticketQuantity) === 1 ? 'ticket' : 'tickets'
+
+  return `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Ticket Confirmation - ${venueDisplayName}</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+      <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1);">
+
+        <!-- Subtle header -->
+        <div style="text-align: center; color: #6c757d; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px;">
+          ${venueDisplayName}
+        </div>
+
+        <!-- Single confirmation message -->
+        <h1 style="margin: 0 0 8px 0; color: #333; font-size: 24px; font-weight: 600; text-align: center;">
+          You're on the list, ${customerName}!
+        </h1>
+        <p style="text-align: center; color: #495057; font-size: 16px; margin: 0 0 32px 0;">
+          Your ${ticketQuantity} ${ticketLabel} ${Number(ticketQuantity) === 1 ? 'is' : 'are'} confirmed for ${bookingDate}.
+        </p>
+
+        <!-- Primary CTA: Add Guest Names -->
+        ${guestListUrl ? `
+        <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); border-radius: 12px; padding: 24px; margin: 0 0 32px 0; text-align: center;">
+          <p style="margin: 0 0 8px 0; color: white; font-size: 18px; font-weight: 600;">
+            Who's coming with you?
+          </p>
+          <p style="margin: 0 0 20px 0; color: rgba(255,255,255,0.9); font-size: 14px;">
+            Add your guest names now so they're on the door list when they arrive.
+          </p>
+          <a href="${guestListUrl}" style="display: inline-block; background: white; color: #ee5a24; padding: 14px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px;">
+            Add Guest Names
+          </a>
+        </div>
+        ` : ''}
+
+        <!-- Booking Details -->
+        <div style="background: #f8f9fa; border-radius: 12px; padding: 24px; margin: 0 0 32px 0;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+            ${occasionName ? `
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Event</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${occasionName}</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Date</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${bookingDate}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Tickets</td>
+              <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${ticketQuantity}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 0; color: #6c757d; font-size: 13px;">Reference</td>
+              <td style="padding: 10px 0; color: #6c757d; font-size: 13px; text-align: right; font-family: 'Courier New', monospace;">${referenceCode}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- On the day instructions -->
+        <div style="margin: 0 0 32px 0;">
+          <h3 style="margin: 0 0 16px 0; color: #333; font-size: 16px; font-weight: 600;">
+            On the night
+          </h3>
+          <div style="background: #fff8e6; border-radius: 8px; padding: 20px; border-left: 4px solid #ffc107;">
+            <p style="margin: 0 0 12px 0; color: #495057;">
+              <strong>1.</strong> Head to ${venueDisplayName} on the night of your event
+            </p>
+            <p style="margin: 0 0 12px 0; color: #495057;">
+              <strong>2.</strong> Give your name at the door - you're on the guest list!
+            </p>
+            <p style="margin: 0; color: #495057;">
+              <strong>3.</strong> Enjoy your night!
+            </p>
+          </div>
+        </div>
+
+        <!-- Tip -->
+        <p style="color: #6c757d; font-size: 14px; margin: 0 0 32px 0; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+          <strong>Tip:</strong> Make sure all your guests are added to the list before the event. They'll need to give their name at the door.
+        </p>
+
+        <!-- Friendly sign-off -->
+        <div style="text-align: center; margin: 0 0 32px 0;">
+          <p style="color: #333; font-size: 16px; margin: 0 0 8px 0;">
+            See you there! 🎉
+          </p>
+          <p style="color: #6c757d; font-size: 14px; margin: 0;">
+            The ${venueDisplayName} Team
+          </p>
+        </div>
+
+        <!-- Footer with linked socials -->
+        <div style="text-align: center; padding-top: 24px; border-top: 1px solid #e9ecef;">
+          <p style="margin: 0 0 12px 0;">
+            <a href="https://instagram.com/${instagramHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+              Instagram
+            </a>
+            <span style="color: #dee2e6;">|</span>
+            <a href="https://facebook.com/${facebookHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+              Facebook
+            </a>
+          </p>
+          <p style="margin: 16px 0 0 0; font-size: 12px; color: #adb5bd;">
+            This confirmation was sent to ${customerEmail}
+          </p>
         </div>
       </div>
     </body>
@@ -399,8 +577,8 @@ serve(async (req: Request) => {
     const from = payload.from ?? defaultFrom
     const replyTo = payload.replyTo
 
-    // For karaoke-confirmation emails, ensure we have a guestListUrl derived from token when present
-    if (tplName === 'karaoke-confirmation' && payload.data) {
+    // For karaoke-confirmation and ticket emails, ensure we have a guestListUrl derived from token when present
+    if ((tplName === 'karaoke-confirmation' || tplName === 'priority-ticket-confirmation') && payload.data) {
       const token = get(payload.data as Record<string, unknown>, 'guestListToken') as string | undefined
       const explicitUrl = get(payload.data as Record<string, unknown>, 'guestListUrl') as string | undefined
       const siteOrigin = get(payload.data as Record<string, unknown>, 'siteOrigin') as string | undefined
@@ -423,6 +601,8 @@ serve(async (req: Request) => {
         html = renderVenueInternalNotificationHTML(payload.data || {})
       } else if (tplName === 'staff-invite') {
         html = renderStaffInviteHTML(payload.data || {})
+      } else if (tplName === 'priority-ticket-confirmation') {
+        html = renderTicketConfirmationHTML(payload.data || {})
       }
     }
     if (!html) return json({ success: false, error: "Missing email HTML content" }, 400)
@@ -440,9 +620,11 @@ serve(async (req: Request) => {
         subject: payload.subject ?? (
           tplName === 'karaoke-confirmation'
             ? 'Karaoke Booking Confirmation - Manor Perth'
-            : tplName === 'staff-invite'
-              ? 'You’ve been invited to GM Staff Portal'
-              : 'Booking Confirmation - Manor Perth'
+            : tplName === 'priority-ticket-confirmation'
+              ? 'Your Tickets are Confirmed!'
+              : tplName === 'staff-invite'
+                ? "You've been invited to GM Staff Portal"
+                : 'Booking Confirmation - Manor Perth'
         ),
         html,
         reply_to: replyTo,

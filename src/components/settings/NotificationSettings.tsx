@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Plus, X, Send, Eye, Clock } from 'lucide-react';
+import { Loader2, Plus, X, Send, Eye, Clock, Mail } from 'lucide-react';
 import { formatHour, formatSchedule } from '@/utils/dateUtils';
 
 interface NotificationSettings {
@@ -401,6 +401,588 @@ function NotificationCard({
   );
 }
 
+function EmailTemplateTester() {
+  const [venue, setVenue] = useState<'manor' | 'hippie'>('manor');
+  const [testEmail, setTestEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const { toast } = useToast();
+
+  async function sendTestEmail() {
+    if (!testEmail) {
+      toast({
+        title: 'Email Required',
+        description: 'Please enter an email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setSending(true);
+      const { error } = await supabase.functions.invoke('send-email', {
+        body: {
+          template: 'karaoke-confirmation',
+          to: testEmail,
+          data: {
+            customerName: 'Test User',
+            customerEmail: testEmail,
+            referenceCode: 'K-TEST01',
+            venue: venue,
+            boothName: 'Karaoke Room A',
+            bookingDate: 'Saturday 1 February 2026',
+            startTime: '7:00 PM',
+            endTime: '8:00 PM',
+            guestCount: '4',
+            guestListUrl: `https://${venue === 'manor' ? 'manorleederville.com' : 'hippieclubperth.com'}/guest-list?token=test123`,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: `Test email sent to ${testEmail}`,
+      });
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send test email. Check the console for details.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function generatePreview() {
+    try {
+      setPreviewing(true);
+      // Build the HTML locally for preview using the same template structure
+      const venueDisplayName = venue === 'manor' ? 'Manor' : 'Hippie Club';
+      const instagramHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth';
+      const facebookHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth';
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Karaoke Booking Confirmation - ${venueDisplayName}</title>
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+            <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1);">
+              <div style="text-align: center; color: #6c757d; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px;">
+                ${venueDisplayName} Karaoke
+              </div>
+              <h1 style="margin: 0 0 8px 0; color: #333; font-size: 24px; font-weight: 600; text-align: center;">
+                You're all set, Test User!
+              </h1>
+              <p style="text-align: center; color: #495057; font-size: 16px; margin: 0 0 32px 0;">
+                Your karaoke booth is confirmed for Saturday 1 February 2026.
+              </p>
+              <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); border-radius: 12px; padding: 24px; margin: 0 0 32px 0; text-align: center;">
+                <p style="margin: 0 0 8px 0; color: white; font-size: 18px; font-weight: 600;">
+                  Who's joining you?
+                </p>
+                <p style="margin: 0 0 20px 0; color: rgba(255,255,255,0.9); font-size: 14px;">
+                  Add your guests now so they're on the door list when they arrive.
+                </p>
+                <a href="#" style="display: inline-block; background: white; color: #ee5a24; padding: 14px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px;">
+                  Add Guest Names
+                </a>
+              </div>
+              <div style="background: #f8f9fa; border-radius: 12px; padding: 24px; margin: 0 0 32px 0;">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Date</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">Saturday 1 February 2026</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Time</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">7:00 PM - 8:00 PM</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Booth</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">Karaoke Room A</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Guests</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">Up to 4 people</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-size: 13px;">Reference</td>
+                    <td style="padding: 10px 0; color: #6c757d; font-size: 13px; text-align: right; font-family: 'Courier New', monospace;">K-TEST01</td>
+                  </tr>
+                </table>
+              </div>
+              <div style="margin: 0 0 32px 0;">
+                <h3 style="margin: 0 0 16px 0; color: #333; font-size: 16px; font-weight: 600;">
+                  On the day
+                </h3>
+                <div style="background: #fff8e6; border-radius: 8px; padding: 20px; border-left: 4px solid #ffc107;">
+                  <p style="margin: 0 0 12px 0; color: #495057;">
+                    <strong>1.</strong> Arrive 10 minutes before your booking time
+                  </p>
+                  <p style="margin: 0 0 12px 0; color: #495057;">
+                    <strong>2.</strong> Head to the bar upstairs at ${venueDisplayName} to check in
+                  </p>
+                  <p style="margin: 0; color: #495057;">
+                    <strong>3.</strong> Collect your wristbands and you're ready to sing!
+                  </p>
+                </div>
+              </div>
+              <p style="color: #6c757d; font-size: 14px; margin: 0 0 32px 0; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+                <strong>Tip:</strong> If you purchased guest list entries, they'll arrive by email the day before. Don't want to queue? Message us on Instagram.
+              </p>
+              <div style="text-align: center; margin: 0 0 32px 0;">
+                <p style="color: #333; font-size: 16px; margin: 0 0 8px 0;">
+                  See you soon! 🎤
+                </p>
+                <p style="color: #6c757d; font-size: 14px; margin: 0;">
+                  The ${venueDisplayName} Team
+                </p>
+              </div>
+              <div style="text-align: center; padding-top: 24px; border-top: 1px solid #e9ecef;">
+                <p style="margin: 0 0 12px 0;">
+                  <a href="https://instagram.com/${instagramHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+                    Instagram
+                  </a>
+                  <span style="color: #dee2e6;">|</span>
+                  <a href="https://facebook.com/${facebookHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+                    Facebook
+                  </a>
+                </p>
+                <p style="margin: 16px 0 0 0; font-size: 12px; color: #adb5bd;">
+                  This confirmation was sent to test@example.com
+                </p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      setPreviewHtml(html);
+      setShowPreview(true);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  return (
+    <>
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Karaoke Confirmation Email Preview</DialogTitle>
+            <DialogDescription>
+              Preview of the {venue === 'manor' ? 'Manor' : 'Hippie Club'} karaoke booking confirmation email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border rounded-lg overflow-hidden">
+            <iframe
+              srcDoc={previewHtml}
+              className="w-full h-[600px] bg-white"
+              title="Email Preview"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-gm-primary-500" />
+            <div>
+              <CardTitle>Email Template Testing</CardTitle>
+              <CardDescription>Send test karaoke confirmation emails to preview the template</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Venue</Label>
+            <Select value={venue} onValueChange={(val) => setVenue(val as 'manor' | 'hippie')}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manor">Manor</SelectItem>
+                <SelectItem value="hippie">Hippie Club</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Test Email Address</Label>
+            <Input
+              type="email"
+              placeholder="your@email.com"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  sendTestEmail();
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex space-x-2 pt-2">
+            <Button
+              onClick={generatePreview}
+              variant="outline"
+              disabled={previewing}
+              className="flex-1"
+            >
+              {previewing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={sendTestEmail}
+              disabled={sending || !testEmail}
+              className="flex-1"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Test Email
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function TicketEmailTester() {
+  const [venue, setVenue] = useState<'manor' | 'hippie'>('manor');
+  const [testEmail, setTestEmail] = useState('');
+  const [ticketQuantity, setTicketQuantity] = useState('2');
+  const [sending, setSending] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const { toast } = useToast();
+
+  async function sendTestEmail() {
+    if (!testEmail) {
+      toast({
+        title: 'Email Required',
+        description: 'Please enter an email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setSending(true);
+      const { error } = await supabase.functions.invoke('send-email', {
+        body: {
+          template: 'priority-ticket-confirmation',
+          to: testEmail,
+          data: {
+            customerName: 'Test User',
+            customerEmail: testEmail,
+            referenceCode: 'T-TEST01',
+            venue: venue,
+            occasionName: 'Saturday Night Special',
+            bookingDate: 'Saturday 1 February 2026',
+            ticketQuantity: ticketQuantity,
+            guestListUrl: `https://${venue === 'manor' ? 'manorleederville.com' : 'hippieclubperth.com'}/guest-list?token=test123`,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: `Test email sent to ${testEmail}`,
+      });
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send test email. Check the console for details.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function generatePreview() {
+    try {
+      setPreviewing(true);
+      const venueDisplayName = venue === 'manor' ? 'Manor' : 'Hippie Club';
+      const instagramHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth';
+      const facebookHandle = venue === 'manor' ? 'manorleederville' : 'hipeclubperth';
+      const qty = Number(ticketQuantity);
+      const ticketLabel = qty === 1 ? 'ticket' : 'tickets';
+      const isAre = qty === 1 ? 'is' : 'are';
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Ticket Confirmation - ${venueDisplayName}</title>
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+            <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,.1);">
+              <div style="text-align: center; color: #6c757d; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px;">
+                ${venueDisplayName}
+              </div>
+              <h1 style="margin: 0 0 8px 0; color: #333; font-size: 24px; font-weight: 600; text-align: center;">
+                You're on the list, Test User!
+              </h1>
+              <p style="text-align: center; color: #495057; font-size: 16px; margin: 0 0 32px 0;">
+                Your ${ticketQuantity} ${ticketLabel} ${isAre} confirmed for Saturday 1 February 2026.
+              </p>
+              <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); border-radius: 12px; padding: 24px; margin: 0 0 32px 0; text-align: center;">
+                <p style="margin: 0 0 8px 0; color: white; font-size: 18px; font-weight: 600;">
+                  Who's coming with you?
+                </p>
+                <p style="margin: 0 0 20px 0; color: rgba(255,255,255,0.9); font-size: 14px;">
+                  Add your guest names now so they're on the door list when they arrive.
+                </p>
+                <a href="#" style="display: inline-block; background: white; color: #ee5a24; padding: 14px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px;">
+                  Add Guest Names
+                </a>
+              </div>
+              <div style="background: #f8f9fa; border-radius: 12px; padding: 24px; margin: 0 0 32px 0;">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Event</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">Saturday Night Special</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Date</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">Saturday 1 February 2026</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #495057; font-weight: 600; border-bottom: 1px solid #e9ecef;">Tickets</td>
+                    <td style="padding: 10px 0; color: #333; text-align: right; border-bottom: 1px solid #e9ecef;">${ticketQuantity}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #6c757d; font-size: 13px;">Reference</td>
+                    <td style="padding: 10px 0; color: #6c757d; font-size: 13px; text-align: right; font-family: 'Courier New', monospace;">T-TEST01</td>
+                  </tr>
+                </table>
+              </div>
+              <div style="margin: 0 0 32px 0;">
+                <h3 style="margin: 0 0 16px 0; color: #333; font-size: 16px; font-weight: 600;">
+                  On the night
+                </h3>
+                <div style="background: #fff8e6; border-radius: 8px; padding: 20px; border-left: 4px solid #ffc107;">
+                  <p style="margin: 0 0 12px 0; color: #495057;">
+                    <strong>1.</strong> Head to ${venueDisplayName} on the night of your event
+                  </p>
+                  <p style="margin: 0 0 12px 0; color: #495057;">
+                    <strong>2.</strong> Give your name at the door - you're on the guest list!
+                  </p>
+                  <p style="margin: 0; color: #495057;">
+                    <strong>3.</strong> Enjoy your night!
+                  </p>
+                </div>
+              </div>
+              <p style="color: #6c757d; font-size: 14px; margin: 0 0 32px 0; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+                <strong>Tip:</strong> Make sure all your guests are added to the list before the event. They'll need to give their name at the door.
+              </p>
+              <div style="text-align: center; margin: 0 0 32px 0;">
+                <p style="color: #333; font-size: 16px; margin: 0 0 8px 0;">
+                  See you there! 🎉
+                </p>
+                <p style="color: #6c757d; font-size: 14px; margin: 0;">
+                  The ${venueDisplayName} Team
+                </p>
+              </div>
+              <div style="text-align: center; padding-top: 24px; border-top: 1px solid #e9ecef;">
+                <p style="margin: 0 0 12px 0;">
+                  <a href="https://instagram.com/${instagramHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+                    Instagram
+                  </a>
+                  <span style="color: #dee2e6;">|</span>
+                  <a href="https://facebook.com/${facebookHandle}" style="color: #6c757d; text-decoration: none; margin: 0 12px;">
+                    Facebook
+                  </a>
+                </p>
+                <p style="margin: 16px 0 0 0; font-size: 12px; color: #adb5bd;">
+                  This confirmation was sent to test@example.com
+                </p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      setPreviewHtml(html);
+      setShowPreview(true);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  return (
+    <>
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Ticket Confirmation Email Preview</DialogTitle>
+            <DialogDescription>
+              Preview of the {venue === 'manor' ? 'Manor' : 'Hippie Club'} ticket confirmation email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border rounded-lg overflow-hidden">
+            <iframe
+              srcDoc={previewHtml}
+              className="w-full h-[600px] bg-white"
+              title="Email Preview"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-gm-primary-500" />
+            <div>
+              <CardTitle>Ticket Email Testing</CardTitle>
+              <CardDescription>Send test ticket confirmation emails to preview the template</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Venue</Label>
+              <Select value={venue} onValueChange={(val) => setVenue(val as 'manor' | 'hippie')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manor">Manor</SelectItem>
+                  <SelectItem value="hippie">Hippie Club</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Ticket Quantity</Label>
+              <Select value={ticketQuantity} onValueChange={setTicketQuantity}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 ticket</SelectItem>
+                  <SelectItem value="2">2 tickets</SelectItem>
+                  <SelectItem value="4">4 tickets</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Test Email Address</Label>
+            <Input
+              type="email"
+              placeholder="your@email.com"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  sendTestEmail();
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex space-x-2 pt-2">
+            <Button
+              onClick={generatePreview}
+              variant="outline"
+              disabled={previewing}
+              className="flex-1"
+            >
+              {previewing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={sendTestEmail}
+              disabled={sending || !testEmail}
+              className="flex-1"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Test Email
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
 export function NotificationSettings() {
   const [tradeReportSettings, setTradeReportSettings] = useState<NotificationSettings | null>(null);
   const [businessPerfSettings, setBusinessPerfSettings] = useState<NotificationSettings | null>(null);
@@ -706,6 +1288,9 @@ export function NotificationSettings() {
             updatingSchedule={updatingSchedule.businessPerf}
           />
         )}
+
+        <EmailTemplateTester />
+        <TicketEmailTester />
       </div>
     </>
   );
