@@ -2,8 +2,7 @@
 import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ChevronUp, ChevronDown, Plus, Star } from "lucide-react";
+import { ChevronUp, ChevronDown, Plus } from "lucide-react";
 import { CustomerRow } from "@/services/customerService";
 import { CustomerProfilePanel } from "./CustomerProfilePanel";
 import { format } from "date-fns";
@@ -112,7 +111,7 @@ export const CustomersTable = ({ customers, sortField, sortDirection, onSort }: 
                   {getSortIcon('lastVisit')}
                 </div>
               </TableHead>
-              <TableHead 
+              <TableHead
                 className="cursor-pointer hover:bg-gm-neutral-50 dark:hover:bg-gm-neutral-800"
                 onClick={() => onSort('customerSince')}
               >
@@ -121,7 +120,6 @@ export const CustomersTable = ({ customers, sortField, sortDirection, onSort }: 
                   {getSortIcon('customerSince')}
                 </div>
               </TableHead>
-              <TableHead className="text-center">Member</TableHead>
               <TableHead className="w-24"></TableHead>
             </TableRow>
           </TableHeader>
@@ -151,16 +149,6 @@ export const CustomersTable = ({ customers, sortField, sortDirection, onSort }: 
                 </TableCell>
                 <TableCell className="text-gm-neutral-600">
                   {formatDate(customer.customerSince)}
-                </TableCell>
-                <TableCell className="text-center">
-                  {customer.is_member ? (
-                    <Badge variant="default" className="text-xs">
-                      <Star className="h-3 w-3 mr-1 fill-amber-400 text-amber-400" />
-                      Member
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-gm-neutral-500">-</span>
-                  )}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Button

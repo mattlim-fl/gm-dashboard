@@ -7,7 +7,6 @@ export type CustomerUpdate = Database['public']['Tables']['customers']['Update']
 
 export interface CustomerFilters {
   search?: string;
-  isMember?: boolean;
   includeArchived?: boolean;
 }
 
@@ -22,10 +21,6 @@ export const customerService = {
     // By default, exclude archived customers unless explicitly requested
     if (!filters?.includeArchived) {
       query = query.eq('is_archived', false);
-    }
-
-    if (filters?.isMember !== undefined) {
-      query = query.eq('is_member', filters.isMember);
     }
 
     if (filters?.search) {
@@ -138,11 +133,6 @@ export const customerService = {
     }
 
     return data;
-  },
-
-  // Helper to get only members
-  async getMembers(search?: string): Promise<CustomerRow[]> {
-    return this.getCustomers({ isMember: true, search });
   },
 
   // Archive a customer (soft delete)

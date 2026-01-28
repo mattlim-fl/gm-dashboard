@@ -26,6 +26,8 @@ import ProfitAndLoss from "./pages/ProfitAndLoss";
 import Occasions from "./pages/Occasions";
 import Team from "./pages/Team";
 import Photos from "./pages/Photos";
+import Members from "./pages/Members";
+import MemberCheckin from "./pages/MemberCheckin";
 
 const queryClient = new QueryClient();
 
@@ -103,6 +105,16 @@ const App = () => (
               <Route path="/photos" element={
                 <ProtectedRoute>
                   <Photos />
+                </ProtectedRoute>
+              } />
+              <Route path="/members" element={
+                <ProtectedRoute>
+                  <Members />
+                </ProtectedRoute>
+              } />
+              <Route path="/members/checkin" element={
+                <ProtectedRoute>
+                  <MemberCheckin />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<NotFound />} />

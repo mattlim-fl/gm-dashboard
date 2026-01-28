@@ -17,7 +17,7 @@ import { CustomerActions } from './CustomerActions';
 import { CustomerEditForm } from './CustomerEditForm';
 import { CustomerRow } from '@/services/customerService';
 import { useBookings } from '@/hooks/useBookings';
-import { useArchiveCustomer, useUpdateCustomer, useCreateCustomer } from '@/hooks/useCustomers';
+import { useArchiveCustomer, useCreateCustomer } from '@/hooks/useCustomers';
 import { QuickAddBookingForm } from '@/components/bookings/QuickAddBookingForm';
 
 type CustomerWithStats = CustomerRow & {
@@ -44,7 +44,6 @@ export const CustomerProfilePanel = ({
   const [isEditing, setIsEditing] = useState(initialView === 'edit' || customer === null);
   const [isCreatingBooking, setIsCreatingBooking] = useState(initialView === 'booking');
   const archiveCustomer = useArchiveCustomer();
-  const updateCustomer = useUpdateCustomer();
   const createCustomer = useCreateCustomer();
 
   // Reset view when panel opens/closes or customer changes
@@ -82,7 +81,6 @@ export const CustomerProfilePanel = ({
           email: updatedCustomer.email || null,
           phone: updatedCustomer.phone || null,
           notes: updatedCustomer.notes || null,
-          is_member: updatedCustomer.is_member || false,
         });
         // Convert to CustomerWithStats
         const newCustomerWithStats: CustomerWithStats = {
@@ -238,7 +236,6 @@ export const CustomerProfilePanel = ({
                 email: null,
                 phone: null,
                 notes: null,
-                is_member: false,
                 is_archived: false,
                 archived_at: null,
                 created_at: new Date().toISOString(),
@@ -254,28 +251,7 @@ export const CustomerProfilePanel = ({
             />
           ) : customer ? (
             <>
-              <CustomerInfo 
-                customer={customer} 
-                onMemberStatusChange={async (isMember) => {
-                  try {
-                    const updated = await updateCustomer.mutateAsync({
-                      id: customer.id,
-                      data: { is_member: isMember ?? false },
-                    });
-                    // Update local customer state to reflect the change immediately
-                    const updatedWithStats: CustomerWithStats = {
-                      ...updated,
-                      totalBookings: customer.totalBookings,
-                      lastVisit: customer.lastVisit,
-                      customerSince: customer.customerSince,
-                    };
-                    onEdit(updatedWithStats);
-                  } catch (error) {
-                    // Re-throw to let the toast handler show the error
-                    throw error;
-                  }
-                }}
-              />
+              <CustomerInfo customer={customer} />
               <BookingHistory 
                 bookings={customerBookings} 
                 onViewAll={() => {}}

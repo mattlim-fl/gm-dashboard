@@ -2,12 +2,10 @@
 import { useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, X } from "lucide-react";
 
 export interface CustomerFilterProps {
   search: string;
-  status: string; // 'all' | 'members' | 'non-members'
 }
 
 interface CustomerFiltersProps {
@@ -25,11 +23,11 @@ export const CustomerFilters = ({ filters, onFiltersChange, onClearFilters }: Cu
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         // Don't trigger if user is typing in an input, textarea, or contenteditable element
         const target = e.target as HTMLElement;
-        const isInputElement = 
-          target.tagName === 'INPUT' || 
-          target.tagName === 'TEXTAREA' || 
+        const isInputElement =
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
           target.isContentEditable;
-        
+
         if (!isInputElement) {
           e.preventDefault();
           // Focus the search input
@@ -59,23 +57,6 @@ export const CustomerFilters = ({ filters, onFiltersChange, onClearFilters }: Cu
             onChange={(e) => onFiltersChange({ search: e.target.value })}
             className="pl-10"
           />
-        </div>
-
-        {/* Status Filter */}
-        <div className="w-full lg:w-48">
-          <Select
-            value={filters.status}
-            onValueChange={(value) => onFiltersChange({ status: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Customers</SelectItem>
-              <SelectItem value="members">Members</SelectItem>
-              <SelectItem value="non-members">Non-Members</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Clear Filters */}

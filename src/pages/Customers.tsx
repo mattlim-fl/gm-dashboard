@@ -1,5 +1,5 @@
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { CustomerFilters, CustomerFilterProps } from "@/components/customers/CustomerFilters";
 import { CustomersTable } from "@/components/customers/CustomersTable";
@@ -7,11 +7,10 @@ import { CustomerPagination } from "@/components/customers/CustomerPagination";
 import { CustomerProfilePanel } from "@/components/customers/CustomerProfilePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Users, UserPlus, TrendingUp } from "lucide-react";
+import { Plus, Users, UserPlus } from "lucide-react";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useBookings } from "@/hooks/useBookings";
 import { CustomerRow } from "@/services/customerService";
-import { BookingRow } from "@/services/bookingService";
 
 // Extended customer type with booking stats for display
 type CustomerWithStats = CustomerRow & {
@@ -27,7 +26,6 @@ const Customers = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filters, setFilters] = useState<CustomerFilterProps>({
     search: '',
-    status: 'all',
   });
 
   // Fetch customers from database
@@ -41,7 +39,7 @@ const Customers = () => {
   // Calculate booking stats per customer
   const customersWithStats = useMemo(() => {
     const customerMap = new Map<string, CustomerWithStats>();
-    
+
     // Initialize with customer data
     customers.forEach(customer => {
       customerMap.set(customer.id, {
@@ -55,7 +53,7 @@ const Customers = () => {
     // Calculate stats from bookings
     allBookings.forEach(booking => {
       // Match booking to customer by email or phone
-      const matchingCustomer = customers.find(c => 
+      const matchingCustomer = customers.find(c =>
         (c.email && booking.customer_email && c.email.toLowerCase() === booking.customer_email.toLowerCase()) ||
         (c.phone && booking.customer_phone && c.phone === booking.customer_phone)
       );
@@ -76,24 +74,19 @@ const Customers = () => {
 
   const filteredCustomers = useMemo(() => {
     return customersWithStats.filter(customer => {
-      const matchesSearch = !filters.search || 
+      const matchesSearch = !filters.search ||
         customer.name.toLowerCase().includes(filters.search.toLowerCase()) ||
         (customer.email && customer.email.toLowerCase().includes(filters.search.toLowerCase())) ||
         (customer.phone && customer.phone.toLowerCase().includes(filters.search.toLowerCase()));
 
-      // Status filter: 'members' = is_member is true, 'non-members' = is_member is false
-      const matchesStatus = filters.status === 'all' || 
-        (filters.status === 'members' && customer.is_member === true) ||
-        (filters.status === 'non-members' && customer.is_member !== true);
-
-      return matchesSearch && matchesStatus;
+      return matchesSearch;
     });
   }, [customersWithStats, filters]);
 
   const sortedCustomers = useMemo(() => {
     const sorted = [...filteredCustomers].sort((a, b) => {
       let aValue, bValue;
-      
+
       switch (sortField) {
         case 'name':
           aValue = a.name;
@@ -127,14 +120,14 @@ const Customers = () => {
       if (typeof aValue === 'string' && typeof bValue === 'string') {
         return sortDirection === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
       }
-      
+
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
       }
-      
+
       return 0;
     });
-    
+
     return sorted;
   }, [filteredCustomers, sortField, sortDirection]);
 
@@ -164,24 +157,20 @@ const Customers = () => {
   const stats = useMemo(() => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    
-    const newThisMonth = customersWithStats.filter(c => 
+
+    const newThisMonth = customersWithStats.filter(c =>
       c.created_at && c.created_at >= startOfMonth
     ).length;
-
-    const totalMembers = customersWithStats.filter(c => c.is_member === true).length;
 
     return {
       totalCustomers: customersWithStats.length,
       newThisMonth,
-      totalMembers,
     };
   }, [customersWithStats]);
 
   const handleClearFilters = () => {
     setFilters({
       search: '',
-      status: 'all',
     });
     setCurrentPage(1);
   };
@@ -214,7 +203,7 @@ const Customers = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
@@ -224,7 +213,7 @@ const Customers = () => {
               <div className="text-2xl font-bold">{loadingCustomers ? '-' : stats.totalCustomers}</div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">New This Month</CardTitle>
@@ -234,20 +223,10 @@ const Customers = () => {
               <div className="text-2xl font-bold">{loadingCustomers ? '-' : stats.newThisMonth}</div>
             </CardContent>
           </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Members</CardTitle>
-              <TrendingUp className="h-4 w-4 text-gm-neutral-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{loadingCustomers ? '-' : stats.totalMembers}</div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Filters */}
-        <CustomerFilters 
+        <CustomerFilters
           filters={filters}
           onFiltersChange={handleFiltersChange}
           onClearFilters={handleClearFilters}
@@ -261,7 +240,7 @@ const Customers = () => {
         </div>
 
         {/* Customers Table */}
-        <CustomersTable 
+        <CustomersTable
           customers={paginatedCustomers}
           sortField={sortField}
           sortDirection={sortDirection}

@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Star } from 'lucide-react';
 import { CustomerRow, customerService } from '@/services/customerService';
 import { useToast } from '@/hooks/use-toast';
 
@@ -22,7 +20,6 @@ export const CustomerEditForm = ({ customer, onSave, onCancel }: CustomerEditFor
     email: customer.email || '',
     phone: customer.phone || '',
     notes: customer.notes || '',
-    is_member: customer.is_member || false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,7 +106,6 @@ export const CustomerEditForm = ({ customer, onSave, onCancel }: CustomerEditFor
       email: formData.email || null,
       phone: formData.phone || null,
       notes: formData.notes || null,
-      is_member: formData.is_member ?? false,
     };
 
     onSave(updatedCustomer);
@@ -184,23 +180,6 @@ export const CustomerEditForm = ({ customer, onSave, onCancel }: CustomerEditFor
               onChange={(e) => updateField('notes', e.target.value)}
               placeholder="Add any notes about this customer..."
               rows={3}
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="is_member" className="text-base flex items-center gap-2">
-                <Star className="h-4 w-4" />
-                Member Status
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Mark this customer as a member
-              </p>
-            </div>
-            <Switch
-              id="is_member"
-              checked={formData.is_member}
-              onCheckedChange={(checked) => updateField('is_member', checked)}
             />
           </div>
 

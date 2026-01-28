@@ -9,13 +9,6 @@ export const useCustomers = (filters?: CustomerFilters) => {
   });
 };
 
-export const useMembers = (search?: string) => {
-  return useQuery({
-    queryKey: ['members', search],
-    queryFn: () => customerService.getMembers(search),
-  });
-};
-
 export const useCreateCustomer = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -24,7 +17,6 @@ export const useCreateCustomer = () => {
     mutationFn: (data: CustomerInsert) => customerService.createCustomer(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['members'] });
       toast({
         title: "Customer Created",
         description: "Customer has been successfully added.",
@@ -45,11 +37,10 @@ export const useUpdateCustomer = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: CustomerUpdate }) => 
+    mutationFn: ({ id, data }: { id: string; data: CustomerUpdate }) =>
       customerService.updateCustomer(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['members'] });
       toast({
         title: "Customer Updated",
         description: "Customer details have been updated.",
@@ -73,7 +64,6 @@ export const useArchiveCustomer = () => {
     mutationFn: (id: string) => customerService.archiveCustomer(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['members'] });
       toast({
         title: "Customer Archived",
         description: "Customer has been archived. Their bookings remain intact.",

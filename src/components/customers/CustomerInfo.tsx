@@ -1,13 +1,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { User, Mail, Phone, CreditCard, MessageSquare, Star, ChevronDown } from "lucide-react";
+import { User, Mail, Phone, CreditCard, MessageSquare } from "lucide-react";
 import { CustomerRow } from "@/services/customerService";
 import { format } from "date-fns";
 
@@ -19,17 +12,9 @@ type CustomerWithStats = CustomerRow & {
 
 interface CustomerInfoProps {
   customer: CustomerWithStats;
-  onMemberStatusChange?: (isMember: boolean) => void;
 }
 
-export const CustomerInfo = ({ customer, onMemberStatusChange }: CustomerInfoProps) => {
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-AU', {
-      style: 'currency',
-      currency: 'AUD'
-    }).format(amount);
-  };
+export const CustomerInfo = ({ customer }: CustomerInfoProps) => {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
@@ -60,54 +45,6 @@ export const CustomerInfo = ({ customer, onMemberStatusChange }: CustomerInfoPro
               <p className="text-xs text-gm-neutral-600">Phone</p>
               <p className="text-xs font-medium">{customer.phone || '-'}</p>
             </div>
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
-              <Star className="h-3 w-3 text-gm-neutral-500 flex-shrink-0" />
-              <p className="text-xs text-gm-neutral-600">Member Status</p>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger>
-                <Badge 
-                  variant={customer.is_member ? 'default' : 'secondary'} 
-                  className="text-xs cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-1"
-                >
-                  {customer.is_member ? (
-                    <>
-                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                      Member
-                    </>
-                  ) : (
-                    'Not a Member'
-                  )}
-                  <ChevronDown className="h-3 w-3" />
-                </Badge>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {customer.is_member ? (
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onMemberStatusChange?.(false);
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    Remove Member Status
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onMemberStatusChange?.(true);
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    Make Member
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </CardContent>
       </Card>

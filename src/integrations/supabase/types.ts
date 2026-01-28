@@ -242,7 +242,6 @@ export type Database = {
           email: string | null
           id: string
           is_archived: boolean | null
-          is_member: boolean | null
           name: string
           notes: string | null
           phone: string | null
@@ -254,7 +253,6 @@ export type Database = {
           email?: string | null
           id?: string
           is_archived?: boolean | null
-          is_member?: boolean | null
           name: string
           notes?: string | null
           phone?: string | null
@@ -266,11 +264,52 @@ export type Database = {
           email?: string | null
           id?: string
           is_archived?: boolean | null
-          is_member?: boolean | null
           name?: string
           notes?: string | null
           phone?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      members: {
+        Row: {
+          id: string
+          venue: string
+          name: string
+          phone: string
+          date_of_birth: string
+          membership_start: string
+          membership_expiry: string
+          first_visit_date: string | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          venue: string
+          name: string
+          phone: string
+          date_of_birth: string
+          membership_start?: string
+          membership_expiry?: string
+          first_visit_date?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          venue?: string
+          name?: string
+          phone?: string
+          date_of_birth?: string
+          membership_start?: string
+          membership_expiry?: string
+          first_visit_date?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

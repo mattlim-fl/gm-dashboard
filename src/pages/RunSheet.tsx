@@ -15,10 +15,12 @@ import { CheckCheck, Search, Users, Mic2, Calendar, ArrowLeft, UserPlus, Star, P
 import { QuickAddBookingDialog } from "@/components/bookings/QuickAddBookingDialog";
 import { BookingDetailsSidebar } from "@/components/bookings/BookingDetailsSidebar";
 import { customerService, CustomerRow } from "@/services/customerService";
+import { memberService, Member } from "@/services/memberService";
 import { AddMemberDialog } from "@/components/members/AddMemberDialog";
-import { MemberProfileDialog } from "@/components/members/MemberProfileDialog";
+import { MemberDetailDialog } from "@/components/members/MemberDetailDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import GuestListGroupedRunSheet from "@/components/occasions/GuestListGroupedRunSheet";
 
 type VenueFilter = 'all' | 'manor' | 'hippie';
 
@@ -36,8 +38,9 @@ export default function RunSheet() {
   const [venue, setVenue] = useState<VenueFilter>('all');
   const [attendance, setAttendance] = useState<AttendanceState>({ vip: {}, karaoke: {} });
   const [showCheckedOff, setShowCheckedOff] = useState<boolean>(false);
-  const [members, setMembers] = useState<CustomerRow[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
 
   // Editing
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
@@ -53,7 +56,7 @@ export default function RunSheet() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Member management
-  const [selectedMember, setSelectedMember] = useState<CustomerRow | null>(null);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isMemberProfileOpen, setIsMemberProfileOpen] = useState(false);
   
   const queryClient = useQueryClient();
@@ -89,7 +92,10 @@ export default function RunSheet() {
     if (activeTab === 'members') {
       setLoadingMembers(true);
       try {
-        const membersData = await customerService.getMembers(search);
+        const membersData = await memberService.fetchMembers({
+          search: search || undefined,
+          status: 'active',
+        });
         setMembers(membersData);
       } catch (error) {
         console.error('Error fetching members:', error);
@@ -488,181 +494,23 @@ export default function RunSheet() {
                   );
                 }
 
-                // Sort the guests based on sortField and sortDirection
-                const sortedGuests = [...flatGuests].sort((a, b) => {
-                  if (!sortField) return 0;
-                  
-                  let aValue: string | boolean | number;
-                  let bValue: string | boolean | number;
-                  
-                  switch (sortField) {
-                    case 'name':
-                      aValue = a.guestName.toLowerCase();
-                      bValue = b.guestName.toLowerCase();
-                      break;
-                    case 'reference':
-                      aValue = a.referenceCode.toLowerCase();
-                      bValue = b.referenceCode.toLowerCase();
-                      break;
-                    case 'organiser':
-                      aValue = (a.organiserName || '').toLowerCase();
-                      bValue = (b.organiserName || '').toLowerCase();
-                      break;
-                    case 'checked':
-                      aValue = a.isChecked ? 1 : 0;
-                      bValue = b.isChecked ? 1 : 0;
-                      break;
-                    default:
-                      return 0;
-                  }
-                  
-                  if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-                  if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-                  return 0;
-                });
-
                 return (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-muted/50 border-b">
-                        <tr>
-                          <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground w-12">#</th>
-                          <th 
-                            className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
-                            onClick={() => handleSort('name')}
-                          >
-                            <span className="flex items-center">
-                              Name
-                              {getSortIcon('name')}
-                            </span>
-                          </th>
-                          <th 
-                            className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
-                            onClick={() => handleSort('reference')}
-                          >
-                            <span className="flex items-center">
-                              Reference
-                              {getSortIcon('reference')}
-                            </span>
-                          </th>
-                          <th 
-                            className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
-                            onClick={() => handleSort('organiser')}
-                          >
-                            <span className="flex items-center">
-                              Organiser
-                              {getSortIcon('organiser')}
-                            </span>
-                          </th>
-                          <th 
-                            className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none"
-                            onClick={() => handleSort('checked')}
-                          >
-                            <span className="flex items-center justify-end">
-                              Check-in
-                              {getSortIcon('checked')}
-                            </span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedGuests.map((guest, index) => {
-                          return (
-                            <tr 
-                              key={guest.id}
-                              className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors ${
-                                guest.isChecked ? 'opacity-60 bg-muted/20' : ''
-                              }`}
-                            >
-                              <td className="py-3 px-4 text-sm text-muted-foreground">
-                                {index + 1}
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-2">
-                                  {editingGuestId === guest.id ? (
-                                    <>
-                                      <Input
-                                        value={editingGuestName}
-                                        onChange={(e) => setEditingGuestName(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            handleSaveGuestName(guest.bookingId, guest.ticketIndex, guest.id, guest.guestId);
-                                          } else if (e.key === 'Escape') {
-                                            handleCancelEditGuest();
-                                          }
-                                        }}
-                                        className="h-8 text-sm flex-1"
-                                        autoFocus
-                                        disabled={savingGuestName}
-                                      />
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 hover:bg-muted"
-                                        onClick={() => handleSaveGuestName(guest.bookingId, guest.ticketIndex, guest.id, guest.guestId)}
-                                        disabled={savingGuestName}
-                                      >
-                                        <Check className="h-3.5 w-3.5 text-green-600" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 hover:bg-muted"
-                                        onClick={handleCancelEditGuest}
-                                        disabled={savingGuestName}
-                                      >
-                                        <X className="h-3.5 w-3.5 text-red-600" />
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 hover:bg-muted"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleStartEditGuest(guest.id, guest.guestName);
-                                        }}
-                                      >
-                                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                                      </Button>
-                                      <span className={`text-sm font-medium ${guest.isChecked ? 'text-muted-foreground line-through' : ''}`}>
-                                        {guest.guestName}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-3 px-4">
-                                <span className="text-sm font-mono text-muted-foreground">{guest.referenceCode}</span>
-                              </td>
-                              <td className="py-3 px-4">
-                                {guest.isOrganiser ? (
-                                  <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-xs">
-                                    Organiser
-                                  </Badge>
-                                ) : guest.organiserName ? (
-                                  <span className="text-sm text-muted-foreground">{guest.organiserName}</span>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">—</span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="flex justify-end">
-                                  <Checkbox 
-                                    checked={guest.isChecked} 
-                                    onCheckedChange={() => handleVipToggle(guest.bookingId, guest.ticketIndex, guest.booking.ticket_quantity || 0)}
-                                    className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                                  />
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <GuestListGroupedRunSheet
+                    guests={flatGuests}
+                    editingGuestId={editingGuestId}
+                    editingGuestName={editingGuestName}
+                    savingGuestName={savingGuestName}
+                    onStartEditGuest={handleStartEditGuest}
+                    onSaveGuestName={handleSaveGuestName}
+                    onCancelEditGuest={handleCancelEditGuest}
+                    onToggleCheckin={(bookingId, ticketIndex, currentChecked) => {
+                      const booking = vipBookings.find(b => b.id === bookingId);
+                      if (booking) {
+                        handleVipToggle(bookingId, ticketIndex, booking.ticket_quantity || 0);
+                      }
+                    }}
+                    onSetEditingGuestName={setEditingGuestName}
+                  />
                 );
               })()}
             </div>
@@ -716,11 +564,22 @@ export default function RunSheet() {
               <Card className="bg-indigo-50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/20">
                 <CardContent className="p-4 flex items-center justify-between">
                    <div className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
-                     Permanent Guest List
+                     Members
                    </div>
-                   <AddMemberDialog onMemberAdded={fetchMembers} />
+                   <Button size="sm" onClick={() => setIsAddMemberOpen(true)}>
+                     <UserPlus className="h-4 w-4 mr-1" />
+                     Add Member
+                   </Button>
                 </CardContent>
               </Card>
+
+              <AddMemberDialog
+                isOpen={isAddMemberOpen}
+                onClose={() => {
+                  setIsAddMemberOpen(false);
+                  fetchMembers();
+                }}
+              />
 
               {members.length === 0 && !loadingMembers && (
                 <div className="text-center py-10 text-muted-foreground">No members found matching your search.</div>
@@ -732,21 +591,21 @@ export default function RunSheet() {
                     <CardContent className="p-3 flex justify-between items-start">
                       <div className="flex-1">
                         <div className="font-bold text-base flex items-center gap-2">
-                          {member.name} 
+                          {member.name}
                           <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                          {!member.first_visit_date && (
+                            <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                              NEW
+                            </Badge>
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">{member.email || 'No email'}</div>
-                        <div className="text-xs text-muted-foreground">{member.phone || 'No phone'}</div>
-                        {member.notes && (
-                          <div className="mt-2 text-xs bg-muted p-1.5 rounded italic">
-                            "{member.notes}"
-                          </div>
-                        )}
+                        <div className="text-xs text-muted-foreground mt-1">{member.phone}</div>
+                        <div className="text-xs text-muted-foreground capitalize">{member.venue}</div>
                       </div>
                       <div className="flex flex-col gap-2">
-                         <Button 
-                           size="sm" 
-                           variant="outline" 
+                         <Button
+                           size="sm"
+                           variant="outline"
                            className="h-7 text-xs"
                            onClick={() => {
                              setSelectedMember(member);
@@ -773,14 +632,13 @@ export default function RunSheet() {
           }}
         />
 
-        <MemberProfileDialog
+        <MemberDetailDialog
           member={selectedMember}
           isOpen={isMemberProfileOpen}
           onClose={() => {
             setIsMemberProfileOpen(false);
             setSelectedMember(null);
           }}
-          onMemberUpdated={fetchMembers}
         />
       </div>
     </DashboardLayout>
