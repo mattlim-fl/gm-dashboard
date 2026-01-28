@@ -162,7 +162,10 @@ export default function Occasions() {
                       {occasion.occasion_name}
                     </h3>
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
+                      <Badge
+                        variant={occasion.venue === 'manor' ? 'default' : 'secondary'}
+                        className={occasion.venue === 'hippie' ? 'bg-pink-600 text-white hover:bg-pink-600' : ''}
+                      >
                         {occasion.venue === 'manor' ? 'Manor' : 'Hippie'}
                       </Badge>
                       <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>

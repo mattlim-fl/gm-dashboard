@@ -499,7 +499,7 @@ export const occasionService = {
       ? window.location.origin.replace('gm-dashboard', occasion.venue === 'manor' ? 'manor-perth-nightlife-ui' : 'hippie-club-ui')
       : occasion.venue === 'manor' 
         ? 'https://manorleederville.com' 
-        : 'https://hippie-club.com';
+        : 'https://hippieclub.com';
     return `${baseUrl}/occasion/${occasion.organiser_token}`;
   },
 
@@ -515,7 +515,7 @@ export const occasionService = {
       ? window.location.origin.replace('gm-dashboard', occasion.venue === 'manor' ? 'manor-perth-nightlife-ui' : 'hippie-club-ui')
       : occasion.venue === 'manor' 
         ? 'https://manorleederville.com' 
-        : 'https://hippie-club.com';
+        : 'https://hippieclub.com';
     return `${baseUrl}/occasion/buy/${occasion.share_token}`;
   },
 };

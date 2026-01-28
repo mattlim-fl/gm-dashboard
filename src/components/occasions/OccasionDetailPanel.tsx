@@ -334,7 +334,10 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
                   <SheetTitle className="text-3xl font-bold dark:text-white text-left">{occasion.occasion_name}</SheetTitle>
                 )}
                 <div className="flex items-center gap-2">
-                  <Badge variant={occasion.venue === 'manor' ? 'default' : 'secondary'}>
+                  <Badge
+                    variant={occasion.venue === 'manor' ? 'default' : 'secondary'}
+                    className={occasion.venue === 'hippie' ? 'bg-pink-600 text-white hover:bg-pink-600' : ''}
+                  >
                     {occasion.venue === 'manor' ? 'Manor' : 'Hippie Club'}
                   </Badge>
                   <Badge variant={occasion.status === 'active' ? 'default' : 'secondary'}>
