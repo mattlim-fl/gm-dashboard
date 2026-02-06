@@ -2,9 +2,23 @@
  * Shared Square API utilities for Supabase Edge Functions
  */
 
+import { withRetry, RetryOptions } from './retry.ts'
+import { PaymentError, logError } from './errors.ts'
+
 // Square API base URL - use sandbox for development
 const SQUARE_API_BASE = 'https://connect.squareupsandbox.com'
 const SQUARE_API_VERSION = '2023-10-18'
+
+// Default retry options for Square API calls
+const SQUARE_RETRY_OPTIONS: RetryOptions = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  retryableStatuses: [429, 502, 503, 504],
+  onRetry: (attempt, delay, error) => {
+    logError('square_retry', error, { attempt, delay })
+  }
+}
 
 export interface ChargeParams {
   amountCents: number
@@ -51,73 +65,90 @@ export async function toIdempotencyKey(value: string): Promise<string> {
 
 /**
  * Charge a customer using Square Payments API
+ * Includes automatic retry with exponential backoff for transient failures
  */
 export async function chargeSquare(params: ChargeParams): Promise<ChargeResult> {
   const { amountCents, token, idempotencyKey, locationId, accessToken } = params
 
-  const res = await fetch(`${SQUARE_API_BASE}/v2/payments`, {
-    method: 'POST',
-    headers: {
-      'Square-Version': SQUARE_API_VERSION,
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      idempotency_key: idempotencyKey,
-      source_id: token,
-      location_id: locationId,
-      amount_money: { amount: amountCents, currency: 'AUD' }
+  return withRetry(async () => {
+    const res = await fetch(`${SQUARE_API_BASE}/v2/payments`, {
+      method: 'POST',
+      headers: {
+        'Square-Version': SQUARE_API_VERSION,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        source_id: token,
+        location_id: locationId,
+        amount_money: { amount: amountCents, currency: 'AUD' }
+      })
     })
-  })
 
-  const body = await res.json()
+    const body = await res.json()
 
-  if (!res.ok) {
-    const message = body?.errors?.[0]?.detail || body?.message || 'Square charge failed'
-    throw new Error(message)
-  }
+    // Check for retryable status codes
+    if ([429, 502, 503, 504].includes(res.status)) {
+      throw new Error(`Square API error ${res.status}: ${body?.errors?.[0]?.detail || res.statusText}`)
+    }
 
-  const paymentId = body?.payment?.id
-  if (!paymentId) throw new Error('Missing Square payment id')
+    if (!res.ok) {
+      const message = body?.errors?.[0]?.detail || body?.message || 'Square charge failed'
+      // Client errors (4xx) should not be retried
+      throw new PaymentError(message, undefined, res.status >= 400 && res.status < 500 ? 400 : 500)
+    }
 
-  return { paymentId }
+    const paymentId = body?.payment?.id
+    if (!paymentId) throw new PaymentError('Missing Square payment id')
+
+    return { paymentId }
+  }, SQUARE_RETRY_OPTIONS)
 }
 
 /**
  * Refund a Square payment
+ * Includes automatic retry with exponential backoff for transient failures
  */
 export async function refundSquarePayment(params: RefundParams): Promise<RefundResult> {
   const { paymentId, amountCents, accessToken, reason } = params
   const idempotencyKey = await toIdempotencyKey(`refund:${paymentId}:${amountCents}:${Date.now()}`)
 
-  const res = await fetch(`${SQUARE_API_BASE}/v2/refunds`, {
-    method: 'POST',
-    headers: {
-      'Square-Version': SQUARE_API_VERSION,
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      idempotency_key: idempotencyKey,
-      payment_id: paymentId,
-      amount_money: { amount: amountCents, currency: 'AUD' },
-      reason: reason || 'Booking creation failed - automatic refund'
+  return withRetry(async () => {
+    const res = await fetch(`${SQUARE_API_BASE}/v2/refunds`, {
+      method: 'POST',
+      headers: {
+        'Square-Version': SQUARE_API_VERSION,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        payment_id: paymentId,
+        amount_money: { amount: amountCents, currency: 'AUD' },
+        reason: reason || 'Booking creation failed - automatic refund'
+      })
     })
-  })
 
-  const body = await res.json()
+    const body = await res.json()
 
-  if (!res.ok) {
-    const message = body?.errors?.[0]?.detail || body?.message || 'Square refund failed'
-    console.error('Refund failed:', { paymentId, amountCents, error: message })
-    throw new Error(`Refund failed: ${message}`)
-  }
+    // Check for retryable status codes
+    if ([429, 502, 503, 504].includes(res.status)) {
+      throw new Error(`Square API error ${res.status}: ${body?.errors?.[0]?.detail || res.statusText}`)
+    }
 
-  const refundId = body?.refund?.id
-  if (!refundId) throw new Error('Missing Square refund id')
+    if (!res.ok) {
+      const message = body?.errors?.[0]?.detail || body?.message || 'Square refund failed'
+      logError('refund_failed', new Error(message), { paymentId, amountCents })
+      throw new PaymentError(`Refund failed: ${message}`, paymentId, res.status >= 400 && res.status < 500 ? 400 : 500)
+    }
 
-  console.log('Refund successful:', { paymentId, refundId, amountCents })
-  return { refundId }
+    const refundId = body?.refund?.id
+    if (!refundId) throw new PaymentError('Missing Square refund id', paymentId)
+
+    console.log('Refund successful:', { paymentId, refundId, amountCents })
+    return { refundId }
+  }, SQUARE_RETRY_OPTIONS)
 }
 
 export interface CreateOrderParams {
@@ -138,6 +169,7 @@ export interface CreateOrderResult {
 
 /**
  * Create a Square order with line items
+ * Includes automatic retry with exponential backoff for transient failures
  */
 export async function createSquareOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
   const { locationId, accessToken, idempotencyKey, lineItems } = params
@@ -148,33 +180,40 @@ export async function createSquareOrder(params: CreateOrderParams): Promise<Crea
     base_price_money: { amount: item.amountCents, currency: 'AUD' }
   }))
 
-  const res = await fetch(`${SQUARE_API_BASE}/v2/orders`, {
-    method: 'POST',
-    headers: {
-      'Square-Version': SQUARE_API_VERSION,
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      idempotency_key: idempotencyKey,
-      order: {
-        location_id: locationId,
-        line_items: squareLineItems
-      }
+  return withRetry(async () => {
+    const res = await fetch(`${SQUARE_API_BASE}/v2/orders`, {
+      method: 'POST',
+      headers: {
+        'Square-Version': SQUARE_API_VERSION,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        order: {
+          location_id: locationId,
+          line_items: squareLineItems
+        }
+      })
     })
-  })
 
-  const body = await res.json()
+    const body = await res.json()
 
-  if (!res.ok) {
-    const message = body?.errors?.[0]?.detail || body?.message || 'Square order creation failed'
-    throw new Error(message)
-  }
+    // Check for retryable status codes
+    if ([429, 502, 503, 504].includes(res.status)) {
+      throw new Error(`Square API error ${res.status}: ${body?.errors?.[0]?.detail || res.statusText}`)
+    }
 
-  const orderId = body?.order?.id
-  const totalCents = Number(body?.order?.total_money?.amount || 0)
+    if (!res.ok) {
+      const message = body?.errors?.[0]?.detail || body?.message || 'Square order creation failed'
+      throw new PaymentError(message, undefined, res.status >= 400 && res.status < 500 ? 400 : 500)
+    }
 
-  if (!orderId) throw new Error('Missing Square order id')
+    const orderId = body?.order?.id
+    const totalCents = Number(body?.order?.total_money?.amount || 0)
 
-  return { orderId, totalCents }
+    if (!orderId) throw new PaymentError('Missing Square order id')
+
+    return { orderId, totalCents }
+  }, SQUARE_RETRY_OPTIONS)
 }
