@@ -28,7 +28,7 @@
 ### Product & Planning
 - **`product/prd/main-product-prd.md`** - Product requirements
 - **`IMPLEMENTATION_STATUS.md`** - Feature status and roadmap
-- **`qr-tickets-branch-1-plan.md`** - QR implementation plan
+- **`ROADMAP.md`** - GM Dashboard development roadmap
 
 ## Directory Structure
 
@@ -36,8 +36,11 @@
 docs/
 ├── README.md (this file)
 ├── IMPLEMENTATION_STATUS.md     # Feature tracking
+├── ROADMAP.md                   # Development roadmap
 ├── edge-functions.md            # API reference
 ├── RLS_POLICIES.md              # Security policies
+├── api-runbook.md               # API operations guide
+├── capacity-constraints.md      # Capacity implementation
 ├── technical/
 │   ├── architecture-overview.md # System architecture ⭐
 │   ├── allowed-origins.md
@@ -48,10 +51,11 @@ docs/
 │   └── README.md
 ├── product/prd/
 │   └── main-product-prd.md      # Product requirements
-├── capacity-constraints.md
-├── capacity-constraints-test-plan.md
-├── widget-integration.md
-├── qr-tickets-branch-*.md       # QR implementation plans
+├── design/
+│   └── design-spec.md
+├── postman/                     # API testing collections
+├── templates/                   # Documentation templates
+├── user-guides/                 # End-user documentation
 └── archive/                     # Historical/deprecated docs
 ```
 
@@ -77,7 +81,15 @@ docs/
 2. **Important:** Feature docs, implementation guides
 3. **Nice to have:** Planning docs, templates
 
-## Deprecated
+## Recently Cleaned Up
 
-- **`api-documentation.md`** - Use `edge-functions.md` instead
-- **`archive/`** - Historical/one-time docs
+The following interim/planning documents have been removed:
+- ~~`qr-tickets-branch-1-plan.md`~~ - QR ticket planning (interim)
+- ~~`qr-tickets-branch-2-plan.md`~~ - Alternative QR approach (interim)
+- ~~`capacity-constraints-test-plan.md`~~ - Testing checklist (completed)
+- ~~`notification-system-setup.md`~~ - One-time setup guide
+- ~~`technical/README-edge-functions-centralisation.md`~~ - Migration note
+
+## Archive
+
+- **`archive/`** - Historical/deprecated docs and one-time migration guides

@@ -1256,8 +1256,8 @@ export function NotificationSettings() {
         {tradeReportSettings && (
           <NotificationCard
             settings={tradeReportSettings}
-            title="Trade Report"
-            description="Sales, revenue, and attendance metrics sent weekly"
+            title="Saturday Trade Report"
+            description="Saturday night (6am-6am AWST) sales, revenue, and attendance metrics"
             functionName="trade-report"
             onUpdate={setTradeReportSettings}
             onSave={() => saveSettings('trade_report')}

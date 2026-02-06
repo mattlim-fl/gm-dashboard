@@ -304,7 +304,6 @@ interface BusinessPerformanceData {
   saturdayLabels: {
     current: string
     previous: string
-    yearAgo: string
   }
   current: {
     revenue: number
@@ -328,7 +327,7 @@ interface BusinessPerformanceData {
     attendance: number
     spendPerHead: number
   }
-  yearAgo: {
+  fourWeekAvg: {
     revenue: number
     wages: number
     wagesPercent: number
@@ -341,17 +340,17 @@ interface BusinessPerformanceData {
   }
   changes: {
     revenuePercent: number
-    revenueYoY: number
+    revenueVsAvg: number
     wagesPercentChange: number
-    wagesYoY: number
+    wagesVsAvg: number
     cogsPercentChange: number
-    cogsYoY: number
+    cogsVsAvg: number
     securityPercentChange: number
-    securityYoY: number
+    securityVsAvg: number
     attendancePercent: number
-    attendanceYoY: number
+    attendanceVsAvg: number
     spendPerHeadPercent: number
-    spendPerHeadYoY: number
+    spendPerHeadVsAvg: number
   }
 }
 
@@ -408,14 +407,14 @@ function calculatePercentChange(current: number, previous: number): number {
 
 /**
  * Calculate date ranges for 7-day period
+ * Returns current week, previous week, and 4 weeks for averaging
  */
 function calculateDateRanges(): {
   currentStart: Date
   currentEnd: Date
   previousStart: Date
   previousEnd: Date
-  yearAgoStart: Date
-  yearAgoEnd: Date
+  avgWeeks: Array<{ start: Date; end: Date }>
 } {
   const now = new Date()
   now.setHours(23, 59, 59, 999)
@@ -432,20 +431,22 @@ function calculateDateRanges(): {
 
   const previousEnd = new Date(currentStart.getTime() - 1)
 
-  // Year-over-year: same date range as current period, one year ago
-  const yearAgoStart = new Date(currentStart)
-  yearAgoStart.setFullYear(yearAgoStart.getFullYear() - 1)
-
-  const yearAgoEnd = new Date(now)
-  yearAgoEnd.setFullYear(yearAgoEnd.getFullYear() - 1)
+  // 4-week average: weeks 2, 3, 4, 5 (excluding current week which is week 1)
+  const avgWeeks: Array<{ start: Date; end: Date }> = []
+  for (let i = 1; i <= 4; i++) {
+    const weekStart = new Date(currentStart)
+    weekStart.setDate(weekStart.getDate() - (7 * i))
+    const weekEnd = new Date(now)
+    weekEnd.setDate(weekEnd.getDate() - (7 * i))
+    avgWeeks.push({ start: weekStart, end: weekEnd })
+  }
 
   return {
     currentStart,
     currentEnd: now,
     previousStart,
     previousEnd,
-    yearAgoStart,
-    yearAgoEnd,
+    avgWeeks,
   }
 }
 
@@ -523,36 +524,43 @@ async function fetchRevenueAndAttendance(
 async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerformanceData> {
   const dateRanges = calculateDateRanges()
 
-  // Fetch P&L data for all three periods (direct from Xero) + revenue/attendance from Square
-  const [currentPnl, previousPnl, yearAgoPnl, currentMetrics, previousMetrics, yearAgoMetrics] = await Promise.all([
+  // Fetch P&L and revenue/attendance for current, previous, and 4 averaging weeks
+  const [currentPnl, previousPnl, currentMetrics, previousMetrics, ...avgData] = await Promise.all([
     fetchPnlData(supabase, dateRanges.currentStart, dateRanges.currentEnd),
     fetchPnlData(supabase, dateRanges.previousStart, dateRanges.previousEnd),
-    fetchPnlData(supabase, dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
     fetchRevenueAndAttendance(supabase, dateRanges.currentStart, dateRanges.currentEnd),
     fetchRevenueAndAttendance(supabase, dateRanges.previousStart, dateRanges.previousEnd),
-    fetchRevenueAndAttendance(supabase, dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
+    // Fetch P&L and metrics for each of the 4 weeks
+    ...dateRanges.avgWeeks.flatMap(week => [
+      fetchPnlData(supabase, week.start, week.end),
+      fetchRevenueAndAttendance(supabase, week.start, week.end),
+    ]),
   ])
+
+  // Parse the avgData array (alternating pnl, metrics for each week)
+  const avgWeekData: Array<{ pnl: any; metrics: { revenue: number; attendance: number } }> = []
+  for (let i = 0; i < 4; i++) {
+    avgWeekData.push({
+      pnl: avgData[i * 2],
+      metrics: avgData[i * 2 + 1] as { revenue: number; attendance: number },
+    })
+  }
 
   // Revenue from Square is in cents GST-inclusive
   const currentRevenueCents = currentMetrics.revenue
   const previousRevenueCents = previousMetrics.revenue
-  const yearAgoRevenueCents = yearAgoMetrics.revenue
 
-  // Convert to GST-exclusive dollars (same as dashboard/financialService)
-  const currentRevenue = (currentRevenueCents / 100) / 1.1
-  const previousRevenue = (previousRevenueCents / 100) / 1.1
-  const yearAgoRevenue = (yearAgoRevenueCents / 100) / 1.1
+  // Convert cents to dollars (GST-inclusive / net sales)
+  const currentRevenue = currentRevenueCents / 100
+  const previousRevenue = previousRevenueCents / 100
 
-  // P&L data from Xero is already in dollars GST-exclusive (parsed via parseXeroPnl)
-  // Use Xero revenue if available, otherwise use Square revenue
+  // P&L data from Xero is already in dollars GST-exclusive
   const currentXeroRevenue = currentPnl?.totals?.revenue || 0
   const previousXeroRevenue = previousPnl?.totals?.revenue || 0
-  const yearAgoXeroRevenue = yearAgoPnl?.totals?.revenue || 0
 
-  // For display, prefer Xero revenue if available as it may be more accurate
+  // For display, prefer Xero revenue if available
   const displayCurrentRevenue = currentXeroRevenue > 0 ? currentXeroRevenue : currentRevenue
   const displayPreviousRevenue = previousXeroRevenue > 0 ? previousXeroRevenue : previousRevenue
-  const displayYearAgoRevenue = yearAgoXeroRevenue > 0 ? yearAgoXeroRevenue : yearAgoRevenue
 
   const currentWages = currentPnl?.categories?.wages || 0
   const currentCogs = currentPnl?.categories?.cogs || 0
@@ -562,9 +570,27 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const previousCogs = previousPnl?.categories?.cogs || 0
   const previousSecurity = previousPnl?.categories?.security || 0
 
-  const yearAgoWages = yearAgoPnl?.categories?.wages || 0
-  const yearAgoCogs = yearAgoPnl?.categories?.cogs || 0
-  const yearAgoSecurity = yearAgoPnl?.categories?.security || 0
+  // Calculate 4-week averages
+  const validWeeks = avgWeekData.filter(w => w.pnl || w.metrics.revenue > 0)
+  const weekCount = validWeeks.length || 1
+
+  // Average revenue (prefer Xero, fallback to Square)
+  const avgRevenue = validWeeks.reduce((sum, w) => {
+    const xeroRev = w.pnl?.totals?.revenue || 0
+    const squareRev = w.metrics.revenue / 100
+    return sum + (xeroRev > 0 ? xeroRev : squareRev)
+  }, 0) / weekCount
+
+  const avgWages = validWeeks.reduce((sum, w) => sum + (w.pnl?.categories?.wages || 0), 0) / weekCount
+  const avgCogs = validWeeks.reduce((sum, w) => sum + (w.pnl?.categories?.cogs || 0), 0) / weekCount
+  const avgSecurity = validWeeks.reduce((sum, w) => sum + (w.pnl?.categories?.security || 0), 0) / weekCount
+  const avgAttendance = validWeeks.reduce((sum, w) => sum + w.metrics.attendance, 0) / weekCount
+
+  // Average spend per head
+  const avgSpendPerHead = validWeeks.reduce((sum, w) => {
+    const spendPerHead = w.metrics.attendance > 0 ? (w.metrics.revenue / 100) / w.metrics.attendance : 0
+    return sum + spendPerHead
+  }, 0) / weekCount
 
   // Calculate cost percentages (costs as % of revenue)
   const currentWagesPercent = displayCurrentRevenue > 0 ? (currentWages / displayCurrentRevenue) * 100 : 0
@@ -575,9 +601,9 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const previousCogsPercent = displayPreviousRevenue > 0 ? (previousCogs / displayPreviousRevenue) * 100 : 0
   const previousSecurityPercent = displayPreviousRevenue > 0 ? (previousSecurity / displayPreviousRevenue) * 100 : 0
 
-  const yearAgoWagesPercent = displayYearAgoRevenue > 0 ? (yearAgoWages / displayYearAgoRevenue) * 100 : 0
-  const yearAgoCogsPercent = displayYearAgoRevenue > 0 ? (yearAgoCogs / displayYearAgoRevenue) * 100 : 0
-  const yearAgoSecurityPercent = displayYearAgoRevenue > 0 ? (yearAgoSecurity / displayYearAgoRevenue) * 100 : 0
+  const avgWagesPercent = avgRevenue > 0 ? (avgWages / avgRevenue) * 100 : 0
+  const avgCogsPercent = avgRevenue > 0 ? (avgCogs / avgRevenue) * 100 : 0
+  const avgSecurityPercent = avgRevenue > 0 ? (avgSecurity / avgRevenue) * 100 : 0
 
   // Spend per head in dollars (GST-inclusive for customer-facing metric)
   const currentSpendPerHead = currentMetrics.attendance > 0
@@ -585,9 +611,6 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
     : 0
   const previousSpendPerHead = previousMetrics.attendance > 0
     ? (previousRevenueCents / 100) / previousMetrics.attendance
-    : 0
-  const yearAgoSpendPerHead = yearAgoMetrics.attendance > 0
-    ? (yearAgoRevenueCents / 100) / yearAgoMetrics.attendance
     : 0
 
   // Calculate week-over-week changes
@@ -598,19 +621,18 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const attendancePercent = calculatePercentChange(currentMetrics.attendance, previousMetrics.attendance)
   const spendPerHeadPercent = calculatePercentChange(currentSpendPerHead, previousSpendPerHead)
 
-  // Calculate year-over-year changes
-  const revenueYoY = calculatePercentChange(displayCurrentRevenue, displayYearAgoRevenue)
-  const wagesYoY = currentWagesPercent - yearAgoWagesPercent
-  const cogsYoY = currentCogsPercent - yearAgoCogsPercent
-  const securityYoY = currentSecurityPercent - yearAgoSecurityPercent
-  const attendanceYoY = calculatePercentChange(currentMetrics.attendance, yearAgoMetrics.attendance)
-  const spendPerHeadYoY = calculatePercentChange(currentSpendPerHead, yearAgoSpendPerHead)
+  // Calculate vs 4-week average changes
+  const revenueVsAvg = calculatePercentChange(displayCurrentRevenue, avgRevenue)
+  const wagesVsAvg = currentWagesPercent - avgWagesPercent
+  const cogsVsAvg = currentCogsPercent - avgCogsPercent
+  const securityVsAvg = currentSecurityPercent - avgSecurityPercent
+  const attendanceVsAvg = calculatePercentChange(currentMetrics.attendance, avgAttendance)
+  const spendPerHeadVsAvg = calculatePercentChange(currentSpendPerHead, avgSpendPerHead)
 
   // Calculate Saturday labels for each period
   const saturdayLabels = {
     current: getSaturdayLabel(dateRanges.currentStart, dateRanges.currentEnd),
     previous: getSaturdayLabel(dateRanges.previousStart, dateRanges.previousEnd),
-    yearAgo: getSaturdayLabel(dateRanges.yearAgoStart, dateRanges.yearAgoEnd),
   }
 
   console.log('Business Performance Data:', {
@@ -618,9 +640,10 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
     currentWages,
     currentCogs,
     currentSecurity,
-    currentWagesPercent,
-    currentCogsPercent,
-    currentSecurityPercent
+    avgRevenue,
+    avgWages,
+    avgCogs,
+    avgSecurity,
   })
 
   return {
@@ -651,46 +674,52 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
       attendance: previousMetrics.attendance,
       spendPerHead: Math.round(previousSpendPerHead * 100),
     },
-    yearAgo: {
-      revenue: Math.round(displayYearAgoRevenue * 100),
-      wages: Math.round(yearAgoWages * 100),
-      wagesPercent: yearAgoWagesPercent,
-      cogs: Math.round(yearAgoCogs * 100),
-      cogsPercent: yearAgoCogsPercent,
-      security: Math.round(yearAgoSecurity * 100),
-      securityPercent: yearAgoSecurityPercent,
-      attendance: yearAgoMetrics.attendance,
-      spendPerHead: Math.round(yearAgoSpendPerHead * 100),
+    fourWeekAvg: {
+      revenue: Math.round(avgRevenue * 100),
+      wages: Math.round(avgWages * 100),
+      wagesPercent: avgWagesPercent,
+      cogs: Math.round(avgCogs * 100),
+      cogsPercent: avgCogsPercent,
+      security: Math.round(avgSecurity * 100),
+      securityPercent: avgSecurityPercent,
+      attendance: Math.round(avgAttendance),
+      spendPerHead: Math.round(avgSpendPerHead * 100),
     },
     changes: {
       revenuePercent,
-      revenueYoY,
+      revenueVsAvg,
       wagesPercentChange,
-      wagesYoY,
+      wagesVsAvg,
       cogsPercentChange,
-      cogsYoY,
+      cogsVsAvg,
       securityPercentChange,
-      securityYoY,
+      securityVsAvg,
       attendancePercent,
-      attendanceYoY,
+      attendanceVsAvg,
       spendPerHeadPercent,
-      spendPerHeadYoY,
+      spendPerHeadVsAvg,
     },
   }
 }
 
 function generateWhatsAppMessage(data: BusinessPerformanceData): string {
+  const formatChange = (change: number, unit: 'percent' | 'pp' = 'percent') => {
+    const sign = change > 0 ? '+' : ''
+    const suffix = unit === 'pp' ? 'pp' : '%'
+    return `${sign}${change.toFixed(1)}${suffix}`
+  }
+
   return `Weekly Performance Report
 
 ${data.saturdayLabels.current}
-Revenue - ${formatCurrency(data.current.revenue)} (ex GST)
-Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}% of revenue)
-COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}% of revenue)
-Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}% of revenue)
-Attendance - ${data.current.attendance.toLocaleString()}
-Spend Per Head - ${formatCurrency(data.current.spendPerHead)}
+Revenue - ${formatCurrency(data.current.revenue)} (${formatChange(data.changes.revenueVsAvg)} vs avg)
+Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}%, ${formatChange(data.changes.wagesVsAvg, 'pp')} vs avg)
+COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}%, ${formatChange(data.changes.cogsVsAvg, 'pp')} vs avg)
+Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}%, ${formatChange(data.changes.securityVsAvg, 'pp')} vs avg)
+Attendance - ${data.current.attendance.toLocaleString()} (${formatChange(data.changes.attendanceVsAvg)} vs avg)
+Spend Per Head - ${formatCurrency(data.current.spendPerHead)} (${formatChange(data.changes.spendPerHeadVsAvg)} vs avg)
 
-${data.saturdayLabels.previous}
+Previous Week
 Revenue - ${formatCurrency(data.previous.revenue)}
 Wages - ${formatCurrency(data.previous.wages)} (${data.previous.wagesPercent.toFixed(1)}%)
 COGS - ${formatCurrency(data.previous.cogs)} (${data.previous.cogsPercent.toFixed(1)}%)
@@ -698,13 +727,13 @@ Security - ${formatCurrency(data.previous.security)} (${data.previous.securityPe
 Attendance - ${data.previous.attendance.toLocaleString()}
 Spend Per Head - ${formatCurrency(data.previous.spendPerHead)}
 
-${data.saturdayLabels.yearAgo}
-Revenue - ${formatCurrency(data.yearAgo.revenue)}
-Wages - ${formatCurrency(data.yearAgo.wages)} (${data.yearAgo.wagesPercent.toFixed(1)}%)
-COGS - ${formatCurrency(data.yearAgo.cogs)} (${data.yearAgo.cogsPercent.toFixed(1)}%)
-Security - ${formatCurrency(data.yearAgo.security)} (${data.yearAgo.securityPercent.toFixed(1)}%)
-Attendance - ${data.yearAgo.attendance.toLocaleString()}
-Spend Per Head - ${formatCurrency(data.yearAgo.spendPerHead)}`
+4-Week Average
+Revenue - ${formatCurrency(data.fourWeekAvg.revenue)}
+Wages - ${formatCurrency(data.fourWeekAvg.wages)} (${data.fourWeekAvg.wagesPercent.toFixed(1)}%)
+COGS - ${formatCurrency(data.fourWeekAvg.cogs)} (${data.fourWeekAvg.cogsPercent.toFixed(1)}%)
+Security - ${formatCurrency(data.fourWeekAvg.security)} (${data.fourWeekAvg.securityPercent.toFixed(1)}%)
+Attendance - ${data.fourWeekAvg.attendance.toLocaleString()}
+Spend Per Head - ${formatCurrency(data.fourWeekAvg.spendPerHead)}`
 }
 
 function getOrdinalSuffix(day: number): string {
@@ -798,56 +827,56 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
   const dateRanges = calculateDateRanges()
   const subtitle = formatSaturdaySubtitle(dateRanges.currentStart, dateRanges.currentEnd)
 
-  // Determine data availability for YoY (if year-ago revenue is 0 and current isn't, likely no data)
-  const yearAgoRevenueAvailable = data.yearAgo.revenue > 0 || data.current.revenue === 0
-  const yearAgoAttendanceAvailable = data.yearAgo.attendance > 0 || data.current.attendance === 0
-  const yearAgoSpendAvailable = data.yearAgo.spendPerHead > 0 || data.current.spendPerHead === 0
-  // For cost metrics, check if year-ago revenue exists (needed for percentage calculation)
-  const yearAgoCostDataAvailable = yearAgoRevenueAvailable
+  // Determine data availability for 4-week average (if avg revenue is 0 and current isn't, likely no data)
+  const avgRevenueAvailable = data.fourWeekAvg.revenue > 0 || data.current.revenue === 0
+  const avgAttendanceAvailable = data.fourWeekAvg.attendance > 0 || data.current.attendance === 0
+  const avgSpendAvailable = data.fourWeekAvg.spendPerHead > 0 || data.current.spendPerHead === 0
+  // For cost metrics, check if avg revenue exists (needed for percentage calculation)
+  const avgCostDataAvailable = avgRevenueAvailable
 
   // Build table rows
   const rows = [
     {
-      metric: 'Revenue (ex GST)',
+      metric: 'Revenue',
       value: formatCurrency(data.current.revenue),
       valueSuffix: '',
       wow: generateIndicator(data.changes.revenuePercent, false, 'percent', true),
-      yoy: generateIndicator(data.changes.revenueYoY, false, 'percent', yearAgoRevenueAvailable),
+      vsAvg: generateIndicator(data.changes.revenueVsAvg, false, 'percent', avgRevenueAvailable),
     },
     {
       metric: 'Wages',
       value: formatCurrency(data.current.wages),
       valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.wagesPercent.toFixed(1)}%)</span>`,
       wow: generateIndicator(data.changes.wagesPercentChange, true, 'pp', true),
-      yoy: generateIndicator(data.changes.wagesYoY, true, 'pp', yearAgoCostDataAvailable),
+      vsAvg: generateIndicator(data.changes.wagesVsAvg, true, 'pp', avgCostDataAvailable),
     },
     {
       metric: 'COGS',
       value: formatCurrency(data.current.cogs),
       valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.cogsPercent.toFixed(1)}%)</span>`,
       wow: generateIndicator(data.changes.cogsPercentChange, true, 'pp', true),
-      yoy: generateIndicator(data.changes.cogsYoY, true, 'pp', yearAgoCostDataAvailable),
+      vsAvg: generateIndicator(data.changes.cogsVsAvg, true, 'pp', avgCostDataAvailable),
     },
     {
       metric: 'Security',
       value: formatCurrency(data.current.security),
       valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.securityPercent.toFixed(1)}%)</span>`,
       wow: generateIndicator(data.changes.securityPercentChange, true, 'pp', true),
-      yoy: generateIndicator(data.changes.securityYoY, true, 'pp', yearAgoCostDataAvailable),
+      vsAvg: generateIndicator(data.changes.securityVsAvg, true, 'pp', avgCostDataAvailable),
     },
     {
       metric: 'Attendance',
       value: data.current.attendance.toLocaleString(),
       valueSuffix: '',
       wow: generateIndicator(data.changes.attendancePercent, false, 'percent', true),
-      yoy: generateIndicator(data.changes.attendanceYoY, false, 'percent', yearAgoAttendanceAvailable),
+      vsAvg: generateIndicator(data.changes.attendanceVsAvg, false, 'percent', avgAttendanceAvailable),
     },
     {
       metric: 'Spend Per Head',
       value: formatCurrency(data.current.spendPerHead),
       valueSuffix: '',
       wow: generateIndicator(data.changes.spendPerHeadPercent, false, 'percent', true),
-      yoy: generateIndicator(data.changes.spendPerHeadYoY, false, 'percent', yearAgoSpendAvailable),
+      vsAvg: generateIndicator(data.changes.spendPerHeadVsAvg, false, 'percent', avgSpendAvailable),
     },
   ]
 
@@ -858,7 +887,7 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
       <td style="padding:14px 16px;${borderStyle}font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-weight:600;font-size:14px;color:#1a1a2e;">${row.metric}</td>
       <td style="padding:14px 16px;${borderStyle}font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#1a1a2e;">${row.value}${row.valueSuffix}</td>
       <td style="padding:14px 16px;${borderStyle}">${row.wow}</td>
-      <td style="padding:14px 16px;${borderStyle}">${row.yoy}</td>
+      <td style="padding:14px 16px;${borderStyle}">${row.vsAvg}</td>
     </tr>`
   }).join('\n')
 
@@ -884,7 +913,7 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
   <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">Metric</th>
   <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">This Week</th>
   <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Week</th>
-  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Year</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs 4-Week Avg</th>
 </tr>
 </thead>
 <tbody>

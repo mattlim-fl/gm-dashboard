@@ -99,17 +99,21 @@ serve(async (req: Request) => {
     console.log(`Updating cron job: ${jobName}`)
     console.log(`New schedule: ${cronExpression} (Day ${day_of_week}, Hour ${hour_awst} AWST)`)
 
-    // Unschedule existing job
-    try {
-      await supabase.rpc('cron.unschedule', { job_name: jobName })
+    // Unschedule existing job using wrapper function
+    const { data: unscheduleResult, error: unscheduleError } = await supabase.rpc('unschedule_cron_job', {
+      job_name: jobName
+    })
+
+    if (unscheduleError) {
+      console.log(`Note: Could not unschedule existing job ${jobName}:`, unscheduleError.message)
+    } else if (unscheduleResult) {
       console.log(`Unscheduled existing job: ${jobName}`)
-    } catch (error) {
-      // Job might not exist, that's okay
+    } else {
       console.log(`No existing job to unschedule: ${jobName}`)
     }
 
-    // Create new cron job
-    const { error: scheduleError } = await supabase.rpc('cron.schedule', {
+    // Create new cron job using wrapper function
+    const { error: scheduleError } = await supabase.rpc('schedule_cron_job', {
       job_name: jobName,
       schedule: cronExpression,
       command: `SELECT net.http_post(url:='${functionUrl}', headers:='{"Content-Type": "application/json", "Authorization": "${authHeader}"}'::jsonb, body:='{}'::jsonb) as request_id;`

@@ -11,10 +11,10 @@ import {
 } from '@/utils/currencyUtils';
 
 /**
- * @deprecated Use formatCurrency from @/utils/currencyUtils with excludeGST option
+ * @deprecated Use formatCurrency from @/utils/currencyUtils instead
  */
 export const formatCurrency = (amount: number) => {
-  return formatCurrencyUtil(amount, { excludeGST: true });
+  return formatCurrencyUtil(amount);
 };
 
 export { formatPercent, getPercentColor };

@@ -92,8 +92,8 @@ export const financialService = {
         });
 
         const revenueCents = weekRevenueRow?.total_revenue_cents || 0;
-        // Convert to GST Exclusive Dollars (divide by 100 then 1.1)
-        const revenue = (revenueCents / 100) / 1.1;
+        // Convert cents to dollars (GST-inclusive / net sales)
+        const revenue = revenueCents / 100;
 
         const costs = costResults[index];
         
@@ -154,9 +154,9 @@ export const financialService = {
       this.getAttendanceForPeriod(previousStart, currentStart)
     ]);
     
-    // Convert to GST-exclusive dollars (same as Revenue page)
-    const currentRevenue = (currentRevenueCents / 100) / 1.1;
-    const previousRevenue = (previousRevenueCents / 100) / 1.1;
+    // Convert cents to dollars (GST-inclusive / net sales)
+    const currentRevenue = currentRevenueCents / 100;
+    const previousRevenue = previousRevenueCents / 100;
 
     // Calculate spend per head (revenue in dollars / attendance)
     const currentSpendPerHead = currentAttendance > 0 ? (currentRevenueCents / 100) / currentAttendance : 0;

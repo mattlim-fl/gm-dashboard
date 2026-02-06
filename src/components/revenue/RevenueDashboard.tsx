@@ -39,12 +39,12 @@ export const RevenueDashboard = () => {
   // Core statistics are now automatically fetched and cached by React Query
 
   const formatCurrency = (cents: number) => {
-    // Convert from GST inclusive to GST exclusive by dividing by 1.1
-    const gstExclusiveAmount = (cents / 100) / 1.1;
+    // Convert cents to dollars (GST-inclusive / net sales)
+    const dollars = cents / 100;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
-    }).format(gstExclusiveAmount);
+    }).format(dollars);
   };
 
   const formatPercentage = (value: number) => {

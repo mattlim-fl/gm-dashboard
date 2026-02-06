@@ -42,10 +42,8 @@ export const formatCurrency = (
   // Convert from cents to dollars if needed
   let dollars = inputInCents ? amount / 100 : amount;
   
-  // Exclude GST if requested
-  if (excludeGST) {
-    dollars = dollars / 1.1;
-  }
+  // Note: excludeGST option is deprecated - revenue now shows GST-inclusive (net sales)
+  // Keeping parameter for backwards compatibility but it's now a no-op
 
   // Determine locale based on currency
   const locale = currency === 'AUD' ? 'en-AU' : 'en-US';

@@ -13,19 +13,19 @@
 - Capacity management with constraints
 - Guest list tracking and share links
 - Guest purchases via shared link
-- **Docs:** `docs/features/occasions-system.md`, `docs/capacity-constraints.md`
+- **Docs:** `features/occasions-system.md`, `capacity-constraints.md`
 
 ### RBAC
 - Staff/admin roles with RLS policies
 - Team management, email whitelist
 - Venue-specific access for staff
-- **Docs:** `docs/features/rbac-system.md`, `docs/RLS_POLICIES.md`
+- **Docs:** `features/rbac-system.md`, `RLS_POLICIES.md`
 
 ### Financial Integration
 - Square payment sync with automated scheduler
 - Revenue analytics page
 - Xero P&L integration
-- **Docs:** `docs/technical/architecture-overview.md`
+- **Docs:** `technical/architecture-overview.md`
 
 ### Multi-Venue
 - Manor and Hippie Club fully integrated
@@ -36,13 +36,7 @@
 ### QR Ticket System
 **Status:** Planning phase
 
-Two approaches documented:
-- Branch 1: URL-based scanning (JWT tokens, extend `ticket_checkins` JSONB)
-- Branch 2: Alternative approach
-
-**Docs:** `docs/qr-tickets-branch-1-plan.md`, `docs/qr-tickets-branch-2-plan.md`
-
-**Next:** Choose approach, implement with TDD
+**Next:** Define implementation approach and begin development with TDD
 
 ## Planned Features 📋
 
@@ -70,7 +64,7 @@ Two approaches documented:
 - Consolidated sync functions
 - Unified revenue page
 - Removed debug/test components
-- **Docs:** `docs/archive/2024-square-refactor.md`
+- **Docs:** `archive/2024-square-refactor.md`
 
 ## Deprecated ⚠️
 
@@ -79,7 +73,7 @@ These documented APIs don't exist (use edge functions instead):
 - ❌ `karaoke-booths-api`, `timeslots-api`, `pricing-api`
 - ✅ Use: `karaoke-availability`, `venue-config-api`, direct DB queries
 
-**Docs:** `docs/edge-functions.md` (current), `docs/archive/deprecated-api-docs.md`
+**Docs:** `edge-functions.md` (current), `archive/deprecated-api-docs.md`
 
 ## Technical Debt
 
@@ -125,7 +119,7 @@ These documented APIs don't exist (use edge functions instead):
 
 ### This Week
 1. ✅ Documentation cleanup
-2. Review QR ticket plans
+2. Define QR ticket implementation approach
 3. Verify widget deployment
 
 ### This Month
@@ -142,7 +136,7 @@ These documented APIs don't exist (use edge functions instead):
 
 ## Questions Needing Decisions
 
-1. **QR Tickets:** Which implementation approach?
+1. **QR Tickets:** Define implementation approach and technical requirements
 2. **Widget:** Verify deployment at booking-widget.getproductbox.com
 3. **Testing:** Define test coverage requirements
 
