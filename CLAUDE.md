@@ -38,6 +38,55 @@ npx supabase db push
 
 Or use MCP: `mcp__supabase__apply_migration`
 
+## Shared Utilities (`supabase/functions/_shared/`)
+
+Edge functions share common utilities to avoid code duplication:
+
+| Module | Purpose |
+|--------|---------|
+| `crypto.ts` | HMAC-SHA256, AES-256-GCM encryption, secure random code generation |
+| `square.ts` | Square API helpers (payments, refunds, orders) with retry logic |
+| `retry.ts` | Exponential backoff with jitter for transient failures |
+| `errors.ts` | Standardized error classes (`PaymentError`, `BookingError`, etc.) |
+| `schemas.ts` | Zod schemas for runtime API response validation |
+
+### Usage in Edge Functions
+```typescript
+import { chargeSquare, refundSquarePayment } from "../_shared/square.ts"
+import { generateSecureCode, encryptToken } from "../_shared/crypto.ts"
+import { withRetry } from "../_shared/retry.ts"
+import { PaymentError, errorResponse } from "../_shared/errors.ts"
+```
+
+## Testing Edge Functions
+
+### Running Tests
+From the `supabase/functions/` directory:
+```bash
+# Run all tests
+deno task test
+
+# Run specific test suites
+deno task test:crypto   # Encryption, hashing, secure codes
+deno task test:retry    # Retry logic, backoff timing
+deno task test:square   # Idempotency keys, Square utilities
+```
+
+### Test Coverage
+Tests are in `supabase/functions/_shared/__tests__/`:
+- **crypto.test.ts** (18 tests) - HMAC, encryption round-trips, secure code generation
+- **retry.test.ts** (16 tests) - Retry behavior, exponential backoff, max retries
+- **square.test.ts** (10 tests) - Idempotency keys, utility functions
+
+### Writing New Tests
+```typescript
+// Example test structure
+Deno.test("description of test", async () => {
+  const result = await someFunction()
+  assertEquals(result, expected)
+})
+```
+
 ## Key Edge Functions
 
 | Function | Purpose |
