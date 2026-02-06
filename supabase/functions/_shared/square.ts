@@ -4,6 +4,12 @@
 
 import { withRetry, RetryOptions } from './retry.ts'
 import { PaymentError, logError } from './errors.ts'
+import {
+  parseSquarePaymentResponse,
+  parseSquareRefundResponse,
+  parseSquareOrderResponse,
+  extractSquareError,
+} from './schemas.ts'
 
 // Square API base URL - use sandbox for development
 const SQUARE_API_BASE = 'https://connect.squareupsandbox.com'
@@ -86,20 +92,24 @@ export async function chargeSquare(params: ChargeParams): Promise<ChargeResult> 
       })
     })
 
-    const body = await res.json()
+    const rawBody = await res.json()
 
     // Check for retryable status codes
     if ([429, 502, 503, 504].includes(res.status)) {
-      throw new Error(`Square API error ${res.status}: ${body?.errors?.[0]?.detail || res.statusText}`)
+      const errorMsg = extractSquareError(rawBody) || res.statusText
+      throw new Error(`Square API error ${res.status}: ${errorMsg}`)
     }
 
     if (!res.ok) {
-      const message = body?.errors?.[0]?.detail || body?.message || 'Square charge failed'
+      const message = extractSquareError(rawBody) || 'Square charge failed'
       // Client errors (4xx) should not be retried
       throw new PaymentError(message, undefined, res.status >= 400 && res.status < 500 ? 400 : 500)
     }
 
-    const paymentId = body?.payment?.id
+    // Validate response with Zod schema
+    const body = parseSquarePaymentResponse(rawBody)
+
+    const paymentId = body.payment?.id
     if (!paymentId) throw new PaymentError('Missing Square payment id')
 
     return { paymentId }
@@ -130,20 +140,24 @@ export async function refundSquarePayment(params: RefundParams): Promise<RefundR
       })
     })
 
-    const body = await res.json()
+    const rawBody = await res.json()
 
     // Check for retryable status codes
     if ([429, 502, 503, 504].includes(res.status)) {
-      throw new Error(`Square API error ${res.status}: ${body?.errors?.[0]?.detail || res.statusText}`)
+      const errorMsg = extractSquareError(rawBody) || res.statusText
+      throw new Error(`Square API error ${res.status}: ${errorMsg}`)
     }
 
     if (!res.ok) {
-      const message = body?.errors?.[0]?.detail || body?.message || 'Square refund failed'
+      const message = extractSquareError(rawBody) || 'Square refund failed'
       logError('refund_failed', new Error(message), { paymentId, amountCents })
       throw new PaymentError(`Refund failed: ${message}`, paymentId, res.status >= 400 && res.status < 500 ? 400 : 500)
     }
 
-    const refundId = body?.refund?.id
+    // Validate response with Zod schema
+    const body = parseSquareRefundResponse(rawBody)
+
+    const refundId = body.refund?.id
     if (!refundId) throw new PaymentError('Missing Square refund id', paymentId)
 
     console.log('Refund successful:', { paymentId, refundId, amountCents })
@@ -197,20 +211,24 @@ export async function createSquareOrder(params: CreateOrderParams): Promise<Crea
       })
     })
 
-    const body = await res.json()
+    const rawBody = await res.json()
 
     // Check for retryable status codes
     if ([429, 502, 503, 504].includes(res.status)) {
-      throw new Error(`Square API error ${res.status}: ${body?.errors?.[0]?.detail || res.statusText}`)
+      const errorMsg = extractSquareError(rawBody) || res.statusText
+      throw new Error(`Square API error ${res.status}: ${errorMsg}`)
     }
 
     if (!res.ok) {
-      const message = body?.errors?.[0]?.detail || body?.message || 'Square order creation failed'
+      const message = extractSquareError(rawBody) || 'Square order creation failed'
       throw new PaymentError(message, undefined, res.status >= 400 && res.status < 500 ? 400 : 500)
     }
 
-    const orderId = body?.order?.id
-    const totalCents = Number(body?.order?.total_money?.amount || 0)
+    // Validate response with Zod schema
+    const body = parseSquareOrderResponse(rawBody)
+
+    const orderId = body.order?.id
+    const totalCents = Number(body.order?.total_money?.amount || 0)
 
     if (!orderId) throw new PaymentError('Missing Square order id')
 

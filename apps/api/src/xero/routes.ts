@@ -5,6 +5,15 @@ import { z } from 'zod';
 import { type Clients } from '../middleware/auth';
 import { decryptSecret, getStoredConnection, upsertConnection } from './tokenStore';
 import { mapAccountToCategory } from './mapping';
+import type {
+  XeroAccount,
+  XeroAccountsResponse,
+  XeroPnlResponse,
+  XeroPnlRow,
+  XeroPnlCell,
+  UncategorizedItem,
+  PnlResult,
+} from './types';
 
 export const xero = new Hono();
 
@@ -64,11 +73,11 @@ xero.get('/accounts', async (c) => {
     });
     con = (await getStoredConnection(supabaseService))!;
   }
-  let json: any;
+  let json: XeroAccountsResponse | null = null;
   try {
-    json = await getAccounts(con.access_token, con.tenant_id);
-  } catch (err: any) {
-    const msg = String(err?.message || err);
+    json = await getAccounts(con.access_token, con.tenant_id) as XeroAccountsResponse;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     // If Xero responded unauthorized, force a refresh and retry once
     if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
       const refreshed = await refreshAccessToken(decryptSecret(con.refresh_token_enc));
@@ -81,13 +90,13 @@ xero.get('/accounts', async (c) => {
         scopes: (refreshed.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
       });
       con = (await getStoredConnection(supabaseService))!;
-      json = await getAccounts(con.access_token, con.tenant_id);
+      json = await getAccounts(con.access_token, con.tenant_id) as XeroAccountsResponse;
     } else {
       console.error('[Xero] Accounts failed:', msg);
       return c.json({ error: 'Xero Accounts request failed', detail: msg }, 502);
     }
   }
-  const items = (json?.Accounts || []).map((a: any) => ({
+  const items = (json?.Accounts || []).map((a: XeroAccount) => ({
     AccountID: a.AccountID,
     Code: a.Code,
     Name: a.Name,
@@ -134,11 +143,11 @@ xero.post('/pnl', async (c) => {
     }
   }
 
-  let data: any;
+  let data: XeroPnlResponse | null = null;
   try {
-    data = await getProfitAndLoss(con.access_token, con.tenant_id, input.data.startDate, input.data.endDate);
-  } catch (err: any) {
-    const msg = String(err?.message || err);
+    data = await getProfitAndLoss(con.access_token, con.tenant_id, input.data.startDate, input.data.endDate) as XeroPnlResponse;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     // If unauthorized, refresh and retry once
     if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
       const refreshed = await refreshAccessToken(decryptSecret(con.refresh_token_enc));
@@ -151,7 +160,7 @@ xero.post('/pnl', async (c) => {
         scopes: (refreshed.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
       });
       con = (await getStoredConnection(supabaseService))!;
-      data = await getProfitAndLoss(con.access_token, con.tenant_id, input.data.startDate, input.data.endDate);
+      data = await getProfitAndLoss(con.access_token, con.tenant_id, input.data.startDate, input.data.endDate) as XeroPnlResponse;
     } else {
       console.error('[Xero] P&L fetch failed:', msg);
       return c.json({ error: 'Xero P&L request failed', detail: msg }, 502);
@@ -162,11 +171,11 @@ xero.post('/pnl', async (c) => {
   let incomeTotal = 0;
   let expenseTotal = 0;
   const categories: Record<string, number> = {};
-  const uncategorized: any[] = [];
+  const uncategorized: UncategorizedItem[] = [];
 
-  const rows = (data?.Reports?.[0]?.Rows || []) as any[];
+  const rows: XeroPnlRow[] = data?.Reports?.[0]?.Rows || [];
 
-  const parseAmount = (s: any): number => {
+  const parseAmount = (s: string | number | undefined | null): number => {
     if (s == null) return 0;
     const str = String(s).replace(/[,\s]/g, '');
     if (!str) return 0;
@@ -177,8 +186,8 @@ xero.post('/pnl', async (c) => {
     return negative ? -Math.abs(n) : n;
   };
 
-  function walk(rows: any[], section: string | null) {
-    for (const r of rows || []) {
+  function walk(rowsToWalk: XeroPnlRow[], section: string | null) {
+    for (const r of rowsToWalk || []) {
       if (r.RowType === 'Section') {
         const title = (r.Title || section || '').toString();
         walk(r.Rows || [], title);
@@ -191,7 +200,7 @@ xero.post('/pnl', async (c) => {
       if (r.RowType === 'Row' && Array.isArray(r.Cells)) {
         const label = (r.Cells[0]?.Value || '').toString();
         // pick the last numeric-looking cell as amount
-        const lastCell = [...r.Cells].reverse().find((c: any) => c && c.Value != null);
+        const lastCell = [...r.Cells].reverse().find((c: XeroPnlCell) => c && c.Value != null);
         const amount = parseAmount(lastCell?.Value);
         if (!label) continue;
 
@@ -210,43 +219,19 @@ xero.post('/pnl', async (c) => {
         // Direct Costs, Overheads, etc.) and matches how Xero structures P&L.
         const isExpense = !isIncome;
 
-        // Determine category heuristically using both section and label.
-        // We keep this intentionally generous so common Xero account names like
-        // "Salaries & Wages", "Cost of Goods Sold", "Direct Costs" etc. are captured.
-        let cat = 'other';
-
-        // Cost of goods / direct costs
+        // Use centralized mapping function to categorize line items
+        // This allows us to maintain all mapping rules in one place (mapping.ts)
+        // and makes it easier to extend to database-backed mappings later
+        let cat = mapAccountToCategory({ Name: label });
+        
+        // Also check section name for COGS (Direct Costs, Cost of Sales sections)
         if (
-          sectionL.includes('cost of sales') ||
-          sectionL.includes('cost of goods') ||
-          sectionL.includes('direct costs') ||
-          labelL.includes('cost of goods') ||
-          labelL.includes('cogs') ||
-          labelL.includes('cost of sales')
+          cat === 'other' && 
+          (sectionL.includes('cost of sales') || 
+           sectionL.includes('cost of goods') || 
+           sectionL.includes('direct costs'))
         ) {
           cat = 'cogs';
-        }
-
-        // Wages / salaries / payroll
-        if (
-          labelL.includes('wage') ||
-          labelL.includes('salary') ||
-          labelL.includes('salaries') ||
-          labelL.includes('payroll') ||
-          labelL.includes('staff') ||
-          labelL.includes('superannuation') ||
-          labelL.includes('super ')
-        ) {
-          cat = 'wages';
-        }
-
-        // Security
-        if (
-          labelL.includes('security') ||
-          labelL.includes('guard') ||
-          labelL.includes('bouncer')
-        ) {
-          cat = 'security';
         }
 
         if (isIncome) {
@@ -271,12 +256,12 @@ xero.post('/pnl', async (c) => {
 
   walk(rows, null);
 
-  const result = {
+  const result: PnlResult = {
     period,
     totals: { income: incomeTotal, expenses: expenseTotal, netProfit: incomeTotal - expenseTotal },
     categories,
     uncategorized,
-    raw: data,
+    raw: data ?? undefined,
   };
   // Save snapshot
   await supabaseService
