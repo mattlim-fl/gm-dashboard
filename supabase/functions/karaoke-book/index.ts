@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
 
 type FinalizeRequest = {
   holdId: string;
@@ -22,42 +23,10 @@ function getCorsHeaders(req: Request) {
   } as Record<string, string>;
 }
 
-async function hmacSha256(message: string, secret: string): Promise<string> {
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const signature = await crypto.subtle.sign('HMAC', key, enc.encode(message))
-  const bytes = new Uint8Array(signature)
-  let hex = ''
-  for (let i = 0; i < bytes.length; i++) {
-    hex += bytes[i].toString(16).padStart(2, '0')
-  }
-  return hex
-}
-
+// Wrapper to get secret from environment
 async function generateGuestListToken(bookingId: string, bookingDate: string): Promise<string> {
   const secret = Deno.env.get('GUEST_LIST_SECRET') || 'guest-list-secret'
-
-  let expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60 // default: 7 days from now
-  try {
-    if (bookingDate) {
-      const d = new Date(String(bookingDate))
-      if (!Number.isNaN(d.getTime())) {
-        d.setDate(d.getDate() + 1) // expire 1 day after booking date
-        expiry = Math.floor(d.getTime() / 1000)
-      }
-    }
-  } catch {
-    // fall back to default expiry
-  }
-
-  const sig = await hmacSha256(`${bookingId}${expiry}`, secret)
-  return `${bookingId}.${expiry}.${sig}`
+  return generateGuestListTokenBase(bookingId, bookingDate, secret)
 }
 
 serve(async (req) => {

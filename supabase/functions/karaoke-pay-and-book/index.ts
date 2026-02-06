@@ -1,5 +1,7 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
+import { chargeSquare, refundSquarePayment, toIdempotencyKey } from "../_shared/square.ts"
 
 // Minimal declaration for Deno global used for env access in Edge Functions
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,57 +48,10 @@ function json(body: unknown, status = 200) {
   })
 }
 
-async function toIdempotencyKey(value: string): Promise<string> {
-  try {
-    const data = new TextEncoder().encode(value)
-    const digest = await crypto.subtle.digest('SHA-256', data)
-    const bytes = new Uint8Array(digest)
-    let hex = ''
-    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0')
-    // Square idempotency key must be <= 45 chars
-    return hex.slice(0, 45)
-  } catch {
-    // Fallback: truncate original string
-    return String(value).slice(0, 45)
-  }
-}
-
-async function hmacSha256(message: string, secret: string): Promise<string> {
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const signature = await crypto.subtle.sign('HMAC', key, enc.encode(message))
-  const bytes = new Uint8Array(signature)
-  let hex = ''
-  for (let i = 0; i < bytes.length; i++) {
-    hex += bytes[i].toString(16).padStart(2, '0')
-  }
-  return hex
-}
-
+// Wrapper to get secret from environment
 async function generateGuestListToken(bookingId: string, bookingDate: string): Promise<string> {
   const secret = Deno.env.get('GUEST_LIST_SECRET') || 'guest-list-secret'
-
-  let expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60 // default: 7 days from now
-  try {
-    if (bookingDate) {
-      const d = new Date(String(bookingDate))
-      if (!Number.isNaN(d.getTime())) {
-        d.setDate(d.getDate() + 1) // expire 1 day after booking date
-        expiry = Math.floor(d.getTime() / 1000)
-      }
-    }
-  } catch {
-    // fall back to default expiry
-  }
-
-  const sig = await hmacSha256(`${bookingId}${expiry}`, secret)
-  return `${bookingId}.${expiry}.${sig}`
+  return generateGuestListTokenBase(bookingId, bookingDate, secret)
 }
 
 function timeToMinutes(timeHHMM: string): number {
@@ -142,73 +97,6 @@ async function fetchHold(holdId: string, supabaseUrl: string, supabaseKey: strin
     throw new Error('Hold expired or inactive')
   }
   return hold
-}
-
-async function createSquareOrder(params: { locationId: string; accessToken: string; idempotencyKey: string; boothCents: number; ticketCents: number; ticketQty: number }): Promise<{ orderId: string; totalCents: number }> {
-  const { locationId, accessToken, idempotencyKey, boothCents, ticketCents, ticketQty } = params
-  const line_items: Array<Record<string, unknown>> = []
-  line_items.push({
-    name: 'Karaoke Booth',
-    quantity: '1',
-    base_price_money: { amount: boothCents, currency: 'AUD' },
-  })
-  if (ticketQty > 0 && ticketCents > 0) {
-    line_items.push({
-      name: 'Venue Ticket',
-      quantity: String(ticketQty),
-      base_price_money: { amount: ticketCents, currency: 'AUD' },
-    })
-  }
-  const res = await fetch('https://connect.squareupsandbox.com/v2/orders', {
-    method: 'POST',
-    headers: {
-      'Square-Version': '2023-10-18',
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      idempotency_key: idempotencyKey,
-      order: {
-        location_id: locationId,
-        line_items,
-      }
-    })
-  })
-  const body = await res.json()
-  if (!res.ok) {
-    const message = body?.errors?.[0]?.detail || body?.message || 'Square order creation failed'
-    throw new Error(message)
-  }
-  const orderId = body?.order?.id
-  const totalCents = Number(body?.order?.total_money?.amount || 0)
-  if (!orderId) throw new Error('Missing Square order id')
-  return { orderId, totalCents }
-}
-
-async function chargeSquare(params: { amountCents: number; token: string; idempotencyKey: string; locationId: string; accessToken: string; orderId?: string }): Promise<{ paymentId: string }> {
-  const { amountCents, token, idempotencyKey, locationId, accessToken, orderId } = params
-  const res = await fetch('https://connect.squareupsandbox.com/v2/payments', {
-    method: 'POST',
-    headers: {
-      'Square-Version': '2023-10-18',
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      idempotency_key: idempotencyKey,
-      source_id: token,
-      location_id: locationId,
-      amount_money: { amount: amountCents, currency: 'AUD' }
-    })
-  })
-  const body = await res.json()
-  if (!res.ok) {
-    const message = body?.errors?.[0]?.detail || body?.message || 'Square charge failed'
-    throw new Error(message)
-  }
-  const paymentId = body?.payment?.id
-  if (!paymentId) throw new Error('Missing Square payment id')
-  return { paymentId }
 }
 
 async function createKaraokeBooking(payload: Omit<PayAndBookRequest, 'paymentToken'> & { totalAmount: number; squarePaymentId: string; durationHours: number }, supabaseUrl: string, supabaseKey: string) {
@@ -327,10 +215,7 @@ async function createTicketBookingRow(payload: { customerName: string; customerE
 }
 
 function generateReferenceCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return `K-${code}`
+  return `K-${generateSecureCode(6)}`
 }
 
 serve(async (req: Request) => {
@@ -349,8 +234,8 @@ serve(async (req: Request) => {
     const SQUARE_LOCATION_ID = Deno.env.get('SQUARE_SANDBOX_LOCATION_ID') || 'LNNPG8BZ4VVMP'
 
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 200)
-    if (!SQUARE_ACCESS_TOKEN) return json({ success: false, error: 'Square sandbox token not configured' }, 200)
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 500)
+    if (!SQUARE_ACCESS_TOKEN) return json({ success: false, error: 'Square sandbox token not configured' }, 500)
 
     const body = (await req.json()) as JsonBody
     const input: PayAndBookRequest = {
@@ -368,9 +253,9 @@ serve(async (req: Request) => {
       ticketQuantity: body.ticketQuantity != null ? Number(body.ticketQuantity) : undefined,
     }
 
-    if (!input.holdId) return json({ success: false, error: 'Missing holdId' }, 200)
-    if (!input.boothId) return json({ success: false, error: 'Missing boothId' }, 200)
-    if (!input.paymentToken) return json({ success: false, error: 'Missing payment token' }, 200)
+    if (!input.holdId) return json({ success: false, error: 'Missing holdId' }, 400)
+    if (!input.boothId) return json({ success: false, error: 'Missing boothId' }, 400)
+    if (!input.paymentToken) return json({ success: false, error: 'Missing payment token' }, 400)
 
     // Resolve hold details so we trust server-side times and booth rather than client input
     const hold = await fetchHold(input.holdId, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -392,10 +277,10 @@ serve(async (req: Request) => {
     const durationMinutes = endMinutes <= startMinutes
       ? (24 * 60 - startMinutes) + endMinutes
       : endMinutes - startMinutes
-    if (!durationMinutes || durationMinutes < 0) return json({ success: false, error: 'Invalid session time range' }, 200)
+    if (!durationMinutes || durationMinutes < 0) return json({ success: false, error: 'Invalid session time range' }, 400)
     const durationHours = durationMinutes / 60
     if (durationHours > 2) {
-      return json({ success: false, error: 'Maximum session length is 2 hours' }, 200)
+      return json({ success: false, error: 'Maximum session length is 2 hours' }, 400)
     }
 
     const boothCents = Math.round(Number(hourlyRate) * durationHours * 100)
@@ -411,33 +296,58 @@ serve(async (req: Request) => {
     // Charge with Square directly (no order creation)
     const { paymentId } = await chargeSquare({ amountCents: totalCents, token: input.paymentToken, idempotencyKey, locationId: SQUARE_LOCATION_ID, accessToken: SQUARE_ACCESS_TOKEN })
 
-    // Create karaoke booking row (confirmed/paid) with booth amount only
-    const booking = await createKaraokeBooking({
-      ...input,
-      totalAmount: boothCents / 100,
-      squarePaymentId: paymentId,
-      durationHours,
-    }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-    // Insert organiser as the first guest entry (with is_organiser = true)
-    await insertOrganiserAsGuest(booking.bookingId, input.customerName, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-    // Generate a signed guest list token for this karaoke booking
-    const guestListToken = await generateGuestListToken(booking.bookingId, input.bookingDate)
-
-    // Create separate vip_tickets booking row (confirmed/paid)
+    // Wrap booking creation in try-catch to trigger refund on failure
+    let booking: { bookingId: string; referenceCode: string }
     let ticketBooking: { bookingId: string; referenceCode: string } | null = null
-    if (ticketQty > 0) {
-      ticketBooking = await createTicketBookingRow({
-        customerName: input.customerName,
-        customerEmail: input.customerEmail,
-        customerPhone: input.customerPhone,
-        venue: input.venue,
-        bookingDate: input.bookingDate,
-        ticketQuantity: ticketQty,
-        totalAmount: ticketsCents / 100,
-        squarePaymentId: paymentId
+    let guestListToken: string
+
+    try {
+      // Create karaoke booking row (confirmed/paid) with booth amount only
+      booking = await createKaraokeBooking({
+        ...input,
+        totalAmount: boothCents / 100,
+        squarePaymentId: paymentId,
+        durationHours,
       }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+      // Insert organiser as the first guest entry (with is_organiser = true)
+      await insertOrganiserAsGuest(booking.bookingId, input.customerName, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+      // Generate a signed guest list token for this karaoke booking
+      guestListToken = await generateGuestListToken(booking.bookingId, input.bookingDate)
+
+      // Create separate vip_tickets booking row (confirmed/paid)
+      if (ticketQty > 0) {
+        ticketBooking = await createTicketBookingRow({
+          customerName: input.customerName,
+          customerEmail: input.customerEmail,
+          customerPhone: input.customerPhone,
+          venue: input.venue,
+          bookingDate: input.bookingDate,
+          ticketQuantity: ticketQty,
+          totalAmount: ticketsCents / 100,
+          squarePaymentId: paymentId
+        }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      }
+    } catch (bookingError) {
+      // Booking creation failed - refund the payment
+      console.error('Booking creation failed, initiating refund:', bookingError)
+      try {
+        await refundSquarePayment({
+          paymentId,
+          amountCents: totalCents,
+          accessToken: SQUARE_ACCESS_TOKEN,
+          reason: 'Booking creation failed - automatic refund'
+        })
+        const errorMsg = bookingError instanceof Error ? bookingError.message : String(bookingError)
+        throw new Error(`Booking failed and payment was refunded: ${errorMsg}`)
+      } catch (refundError) {
+        // Refund also failed - this is critical, log and surface both errors
+        const bookingMsg = bookingError instanceof Error ? bookingError.message : String(bookingError)
+        const refundMsg = refundError instanceof Error ? refundError.message : String(refundError)
+        console.error('CRITICAL: Booking failed and refund also failed:', { paymentId, bookingError: bookingMsg, refundError: refundMsg })
+        throw new Error(`Booking failed (${bookingMsg}). Refund attempt also failed (${refundMsg}). Please contact support with payment ID: ${paymentId}`)
+      }
     }
 
     const result = {
@@ -461,7 +371,13 @@ serve(async (req: Request) => {
   } catch (err) {
     console.error('karaoke-pay-and-book error:', err)
     const message = err instanceof Error ? err.message : String(err)
-    return json({ success: false, error: message }, 200)
+    // Determine appropriate status code based on error type
+    const isClientError = message.includes('Hold expired') ||
+                          message.includes('Hold not found') ||
+                          message.includes('Invalid') ||
+                          message.includes('Missing')
+    const status = isClientError ? 400 : 500
+    return json({ success: false, error: message }, status)
   }
 })
 

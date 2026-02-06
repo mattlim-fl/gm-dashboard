@@ -1,5 +1,7 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
+import { chargeSquare, refundSquarePayment, toIdempotencyKey } from "../_shared/square.ts"
 
 // Minimal declaration for Deno global used for env access in Edge Functions
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,98 +53,19 @@ function getOriginFromRequest(req: Request): string {
   return 'https://manorleederville.com'
 }
 
-async function toIdempotencyKey(value: string): Promise<string> {
-  try {
-    const data = new TextEncoder().encode(value)
-    const digest = await crypto.subtle.digest('SHA-256', data)
-    const bytes = new Uint8Array(digest)
-    let hex = ''
-    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0')
-    // Square idempotency key must be <= 45 chars
-    return hex.slice(0, 45)
-  } catch {
-    // Fallback: truncate original string
-    return String(value).slice(0, 45)
-  }
-}
-
-async function hmacSha256(message: string, secret: string): Promise<string> {
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const signature = await crypto.subtle.sign('HMAC', key, enc.encode(message))
-  const bytes = new Uint8Array(signature)
-  let hex = ''
-  for (let i = 0; i < bytes.length; i++) {
-    hex += bytes[i].toString(16).padStart(2, '0')
-  }
-  return hex
-}
-
+// Wrapper to get secret from environment
 async function generateGuestListToken(bookingId: string, bookingDate: string): Promise<string> {
   const secret = Deno.env.get('GUEST_LIST_SECRET') || 'guest-list-secret'
-
-  let expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60 // default: 7 days from now
-  try {
-    if (bookingDate) {
-      const d = new Date(String(bookingDate))
-      if (!Number.isNaN(d.getTime())) {
-        d.setDate(d.getDate() + 1) // expire 1 day after booking date
-        expiry = Math.floor(d.getTime() / 1000)
-      }
-    }
-  } catch {
-    // fall back to default expiry
-  }
-
-  const sig = await hmacSha256(`${bookingId}${expiry}`, secret)
-  return `${bookingId}.${expiry}.${sig}`
+  return generateGuestListTokenBase(bookingId, bookingDate, secret)
 }
 
 function generateReferenceCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return `TIX-${code}`
+  return `TIX-${generateSecureCode(6)}`
 }
 
 function generateShareToken(): string {
   // 8-char alphanumeric (no ambiguous chars: 0/O, 1/I/L)
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-  let token = ''
-  for (let i = 0; i < 8; i++) token += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return token
-}
-
-async function chargeSquare(params: { amountCents: number; token: string; idempotencyKey: string; locationId: string; accessToken: string }): Promise<{ paymentId: string }> {
-  const { amountCents, token, idempotencyKey, locationId, accessToken } = params
-  const res = await fetch('https://connect.squareupsandbox.com/v2/payments', {
-    method: 'POST',
-    headers: {
-      'Square-Version': '2023-10-18',
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      idempotency_key: idempotencyKey,
-      source_id: token,
-      location_id: locationId,
-      amount_money: { amount: amountCents, currency: 'AUD' }
-    })
-  })
-  const body = await res.json()
-  if (!res.ok) {
-    const message = body?.errors?.[0]?.detail || body?.message || 'Square charge failed'
-    throw new Error(message)
-  }
-  const paymentId = body?.payment?.id
-  if (!paymentId) throw new Error('Missing Square payment id')
-  return { paymentId }
+  return generateSecureCode(8, 'ABCDEFGHJKMNPQRSTUVWXYZ23456789')
 }
 
 async function fetchParentBookingByShareToken(
@@ -325,8 +248,8 @@ serve(async (req: Request) => {
     const SQUARE_ACCESS_TOKEN = Deno.env.get('SQUARE_SANDBOX_ACCESS_TOKEN')
     const SQUARE_LOCATION_ID = Deno.env.get('SQUARE_SANDBOX_LOCATION_ID') || 'LNNPG8BZ4VVMP'
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 200)
-    if (!SQUARE_ACCESS_TOKEN) return json({ success: false, error: 'Square sandbox token not configured' }, 200)
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 500)
+    if (!SQUARE_ACCESS_TOKEN) return json({ success: false, error: 'Square sandbox token not configured' }, 500)
 
     // Get the origin from the request for building the share URL
     const origin = getOriginFromRequest(req)
@@ -346,10 +269,10 @@ serve(async (req: Request) => {
     }
 
     // Validate inputs
-    if (!input.customerName.trim()) return json({ success: false, error: 'Missing customer name' }, 200)
-    if (!input.customerEmail && !input.customerPhone) return json({ success: false, error: 'Email or phone is required' }, 200)
-    if (!input.ticketQuantity || input.ticketQuantity < 1) return json({ success: false, error: 'Invalid ticket quantity' }, 200)
-    if (!input.paymentToken) return json({ success: false, error: 'Missing payment token' }, 200)
+    if (!input.customerName.trim()) return json({ success: false, error: 'Missing customer name' }, 400)
+    if (!input.customerEmail && !input.customerPhone) return json({ success: false, error: 'Email or phone is required' }, 400)
+    if (!input.ticketQuantity || input.ticketQuantity < 1) return json({ success: false, error: 'Invalid ticket quantity' }, 400)
+    if (!input.paymentToken) return json({ success: false, error: 'Missing payment token' }, 400)
 
     // Determine if this is a guest purchase (via shared link) or organiser purchase
     let parentBookingId: string | null = null
@@ -374,7 +297,7 @@ serve(async (req: Request) => {
       )
       const parentData = await capacityCheckRes.json()
       if (!Array.isArray(parentData) || parentData.length === 0) {
-        return json({ success: false, error: 'Occasion not found' }, 200)
+        return json({ success: false, error: 'Occasion not found' }, 404)
       }
       const parentOccasion = parentData[0]
       effectiveBookingDate = parentOccasion.booking_date
@@ -399,10 +322,10 @@ serve(async (req: Request) => {
       const remainingCapacity = capacity - currentGuestCount
       
       if (input.ticketQuantity > remainingCapacity) {
-        return json({ 
-          success: false, 
-          error: `Cannot add ${input.ticketQuantity} guests. Only ${remainingCapacity} spots remaining (capacity: ${capacity})` 
-        }, 200)
+        return json({
+          success: false,
+          error: `Cannot add ${input.ticketQuantity} guests. Only ${remainingCapacity} spots remaining (capacity: ${capacity})`
+        }, 400)
       }
       
       console.log(`Capacity check passed: ${input.ticketQuantity} guests, ${remainingCapacity} spots remaining`)
@@ -410,7 +333,7 @@ serve(async (req: Request) => {
       // Guest purchase: validate the group token
       const parentBooking = await fetchParentBookingByShareToken(input.groupToken, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
       if (!parentBooking) {
-        return json({ success: false, error: 'Invalid or expired group link' }, 200)
+        return json({ success: false, error: 'Invalid or expired group link' }, 400)
       }
       parentBookingId = parentBooking.id
       // Use the parent booking's date and venue (guest cannot change these)
@@ -419,7 +342,7 @@ serve(async (req: Request) => {
       console.log(`Guest purchase linked to parent booking ${parentBookingId}`)
     } else {
       // Organiser purchase: need a booking date, generate share token
-      if (!input.bookingDate) return json({ success: false, error: 'Missing booking date' }, 200)
+      if (!input.bookingDate) return json({ success: false, error: 'Missing booking date' }, 400)
       shareToken = generateShareToken()
       console.log(`Organiser purchase with share token ${shareToken}`)
     }
@@ -441,45 +364,70 @@ serve(async (req: Request) => {
       accessToken: SQUARE_ACCESS_TOKEN
     })
 
-    // Generate guest list token before creating booking
-    const tempId = crypto.randomUUID()
-    const guestListToken = await generateGuestListToken(tempId, effectiveBookingDate)
+    // Wrap booking creation in try-catch to trigger refund on failure
+    let booking: { bookingId: string; referenceCode: string; shareToken: string | null }
+    let actualGuestListToken: string
 
-    // Create ticket booking row
-    const booking = await createTicketBooking({
-      customerName: input.customerName,
-      customerEmail: input.customerEmail,
-      customerPhone: input.customerPhone,
-      venue: effectiveVenue,
-      bookingDate: effectiveBookingDate,
-      ticketQuantity: input.ticketQuantity,
-      ticketType: input.ticketType,
-      ticketPriceCents: TICKET_PRICE_CENTS,
-      totalAmount: totalCents / 100,
-      squarePaymentId: paymentId,
-      guestListToken,
-      shareToken,
-      parentBookingId,
-    }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    try {
+      // Generate guest list token before creating booking
+      const tempId = crypto.randomUUID()
+      const guestListToken = await generateGuestListToken(tempId, effectiveBookingDate)
 
-    // Update the guest list token with the actual booking ID
-    const actualGuestListToken = await generateGuestListToken(booking.bookingId, effectiveBookingDate)
-    
-    // Update the booking with the correct token
-    await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${booking.bookingId}`, {
-      method: 'PATCH',
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ guest_list_token: actualGuestListToken })
-    })
+      // Create ticket booking row
+      booking = await createTicketBooking({
+        customerName: input.customerName,
+        customerEmail: input.customerEmail,
+        customerPhone: input.customerPhone,
+        venue: effectiveVenue,
+        bookingDate: effectiveBookingDate,
+        ticketQuantity: input.ticketQuantity,
+        ticketType: input.ticketType,
+        ticketPriceCents: TICKET_PRICE_CENTS,
+        totalAmount: totalCents / 100,
+        squarePaymentId: paymentId,
+        guestListToken,
+        shareToken,
+        parentBookingId,
+      }, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Insert purchaser as guest in booking_guests
-    // For organiser: is_organiser = true; for guest purchases: is_organiser = false
-    const isOrganiser = !parentBookingId
-    await insertGuestAsBookingGuest(booking.bookingId, input.customerName, isOrganiser, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      // Update the guest list token with the actual booking ID
+      actualGuestListToken = await generateGuestListToken(booking.bookingId, effectiveBookingDate)
+
+      // Update the booking with the correct token
+      await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${booking.bookingId}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ guest_list_token: actualGuestListToken })
+      })
+
+      // Insert purchaser as guest in booking_guests
+      // For organiser: is_organiser = true; for guest purchases: is_organiser = false
+      const isOrganiser = !parentBookingId
+      await insertGuestAsBookingGuest(booking.bookingId, input.customerName, isOrganiser, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    } catch (bookingError) {
+      // Booking creation failed - refund the payment
+      console.error('Booking creation failed, initiating refund:', bookingError)
+      try {
+        await refundSquarePayment({
+          paymentId,
+          amountCents: totalCents,
+          accessToken: SQUARE_ACCESS_TOKEN,
+          reason: 'Ticket booking creation failed - automatic refund'
+        })
+        const errorMsg = bookingError instanceof Error ? bookingError.message : String(bookingError)
+        throw new Error(`Booking failed and payment was refunded: ${errorMsg}`)
+      } catch (refundError) {
+        // Refund also failed - this is critical, log and surface both errors
+        const bookingMsg = bookingError instanceof Error ? bookingError.message : String(bookingError)
+        const refundMsg = refundError instanceof Error ? refundError.message : String(refundError)
+        console.error('CRITICAL: Booking failed and refund also failed:', { paymentId, bookingError: bookingMsg, refundError: refundMsg })
+        throw new Error(`Booking failed (${bookingMsg}). Refund attempt also failed (${refundMsg}). Please contact support with payment ID: ${paymentId}`)
+      }
+    }
 
     // Send confirmation email (fire and forget)
     sendConfirmationEmail({
@@ -514,7 +462,13 @@ serve(async (req: Request) => {
   } catch (err) {
     console.error('ticket-pay-and-book error:', err)
     const message = err instanceof Error ? err.message : String(err)
-    return json({ success: false, error: message }, 200)
+    // Determine appropriate status code based on error type
+    const isClientError = message.includes('Invalid') ||
+                          message.includes('Missing') ||
+                          message.includes('expired') ||
+                          message.includes('not found')
+    const status = isClientError ? 400 : 500
+    return json({ success: false, error: message }, status)
   }
 })
 

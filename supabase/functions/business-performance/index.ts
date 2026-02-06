@@ -2,10 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
-// @ts-expect-error - Deno crypto import
-import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts"
-// @ts-expect-error - Deno encoding import
-import { decode as base64Decode, encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
+import { encryptToken, decryptToken } from "../_shared/crypto.ts"
 
 // Minimal declaration for Deno global
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,111 +36,25 @@ interface XeroTokenResponse {
 }
 
 /**
- * Decrypt the encrypted refresh token using AES-256-GCM
+ * Decrypt the encrypted refresh token using shared crypto module
  */
 async function decryptRefreshToken(encryptedToken: string): Promise<string> {
   const encryptionKey = Deno.env.get('XERO_TOKEN_ENCRYPTION_KEY')
   if (!encryptionKey) {
     throw new Error('XERO_TOKEN_ENCRYPTION_KEY not configured')
   }
-
-  // Get the key (same logic as backend)
-  let keyBytes: Uint8Array
-  if (/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
-    // Hex string
-    keyBytes = new Uint8Array(encryptionKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
-  } else {
-    // Hash the key
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(encryptionKey)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', keyData)
-    keyBytes = new Uint8Array(hashBuffer)
-  }
-
-  // Decode the base64 encrypted data
-  const encryptedData = base64Decode(encryptedToken)
-  
-  // Extract IV (12 bytes), auth tag (16 bytes), and ciphertext
-  const iv = encryptedData.slice(0, 12)
-  const authTag = encryptedData.slice(12, 28)
-  const ciphertext = encryptedData.slice(28)
-
-  // Import the key
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  )
-
-  // Combine ciphertext and auth tag for Web Crypto API
-  const combinedCiphertext = new Uint8Array(ciphertext.length + authTag.length)
-  combinedCiphertext.set(ciphertext, 0)
-  combinedCiphertext.set(authTag, ciphertext.length)
-
-  // Decrypt
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    combinedCiphertext
-  )
-
-  return new TextDecoder().decode(decrypted)
+  return decryptToken(encryptedToken, encryptionKey)
 }
 
 /**
- * Encrypt the refresh token using AES-256-GCM (for updating after refresh)
+ * Encrypt the refresh token using shared crypto module
  */
 async function encryptRefreshToken(plainToken: string): Promise<string> {
   const encryptionKey = Deno.env.get('XERO_TOKEN_ENCRYPTION_KEY')
   if (!encryptionKey) {
     throw new Error('XERO_TOKEN_ENCRYPTION_KEY not configured')
   }
-
-  // Get the key
-  let keyBytes: Uint8Array
-  if (/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
-    keyBytes = new Uint8Array(encryptionKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
-  } else {
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(encryptionKey)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', keyData)
-    keyBytes = new Uint8Array(hashBuffer)
-  }
-
-  // Generate random IV
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-
-  // Import the key
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  )
-
-  // Encrypt
-  const encoder = new TextEncoder()
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    encoder.encode(plainToken)
-  )
-
-  // Extract ciphertext and auth tag
-  const encryptedArray = new Uint8Array(encrypted)
-  const ciphertext = encryptedArray.slice(0, -16)
-  const authTag = encryptedArray.slice(-16)
-
-  // Combine: iv (12) + authTag (16) + ciphertext
-  const result = new Uint8Array(iv.length + authTag.length + ciphertext.length)
-  result.set(iv, 0)
-  result.set(authTag, 12)
-  result.set(ciphertext, 28)
-
-  return base64Encode(result)
+  return encryptToken(plainToken, encryptionKey)
 }
 
 /**
