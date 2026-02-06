@@ -29,7 +29,17 @@ import Photos from "./pages/Photos";
 import Members from "./pages/Members";
 import MemberCheckin from "./pages/MemberCheckin";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes - data stays fresh
+      gcTime: 1000 * 60 * 30,   // 30 minutes - keep in cache
+      refetchOnWindowFocus: false, // Don't refetch when switching tabs
+      refetchOnReconnect: true,    // Do refetch after network reconnect
+      retry: 1,                    // Retry failed requests once
+    },
+  },
+});
 
 const App = () => (
   <ThemeProvider>
