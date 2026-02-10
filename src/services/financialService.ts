@@ -92,8 +92,8 @@ export const financialService = {
         });
 
         const revenueCents = weekRevenueRow?.total_revenue_cents || 0;
-        // Convert cents to dollars (GST-inclusive / net sales)
-        const revenue = revenueCents / 100;
+        // Convert cents to dollars (GST-exclusive)
+        const revenue = (revenueCents / 100) / 1.1;
 
         const costs = costResults[index];
         
@@ -154,13 +154,13 @@ export const financialService = {
       this.getAttendanceForPeriod(previousStart, currentStart)
     ]);
     
-    // Convert cents to dollars (GST-inclusive / net sales)
-    const currentRevenue = currentRevenueCents / 100;
-    const previousRevenue = previousRevenueCents / 100;
+    // Convert cents to dollars (GST-exclusive)
+    const currentRevenue = (currentRevenueCents / 100) / 1.1;
+    const previousRevenue = (previousRevenueCents / 100) / 1.1;
 
-    // Calculate spend per head (revenue in dollars / attendance)
-    const currentSpendPerHead = currentAttendance > 0 ? (currentRevenueCents / 100) / currentAttendance : 0;
-    const previousSpendPerHead = previousAttendance > 0 ? (previousRevenueCents / 100) / previousAttendance : 0;
+    // Calculate spend per head (revenue in dollars / attendance) - GST-exclusive
+    const currentSpendPerHead = currentAttendance > 0 ? ((currentRevenueCents / 100) / 1.1) / currentAttendance : 0;
+    const previousSpendPerHead = previousAttendance > 0 ? ((previousRevenueCents / 100) / 1.1) / previousAttendance : 0;
 
     // Fetch costs from Xero P&L for the same periods
     const [currentCosts, previousCosts] = await Promise.all([

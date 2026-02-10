@@ -39,8 +39,8 @@ export const RevenueDashboard = () => {
   // Core statistics are now automatically fetched and cached by React Query
 
   const formatCurrency = (cents: number) => {
-    // Convert cents to dollars (GST-inclusive / net sales)
-    const dollars = cents / 100;
+    // Convert cents to dollars (GST-exclusive)
+    const dollars = (cents / 100) / 1.1;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'

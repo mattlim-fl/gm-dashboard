@@ -53,13 +53,14 @@ export const RevenueStackedChart = ({
   };
 
   const formatCurrency = (value: number) => {
-    // Format as dollars (GST-inclusive / net sales)
+    // Format as dollars (GST-exclusive)
+    const gstExclusive = value / 1.1;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(value);
+    }).format(gstExclusive);
   };
 
   const formatYear = (yearString: string) => {
