@@ -75,7 +75,9 @@ function json(body: unknown, status = 200) {
 }
 
 function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  // Convert cents to dollars (GST-exclusive)
+  const dollars = (cents / 100) / 1.1
+  return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function formatDate(date: Date): string {

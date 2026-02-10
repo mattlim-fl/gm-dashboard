@@ -372,7 +372,9 @@ function json(body: unknown, status = 200) {
 }
 
 function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  // Convert cents to dollars (GST-exclusive)
+  const dollars = (cents / 100) / 1.1
+  return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function formatDate(date: Date): string {
@@ -605,7 +607,7 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const avgCogsPercent = avgRevenue > 0 ? (avgCogs / avgRevenue) * 100 : 0
   const avgSecurityPercent = avgRevenue > 0 ? (avgSecurity / avgRevenue) * 100 : 0
 
-  // Spend per head in dollars (GST-inclusive for customer-facing metric)
+  // Spend per head in dollars (stored as GST-inclusive, displayed as GST-exclusive via formatCurrency)
   const currentSpendPerHead = currentMetrics.attendance > 0
     ? (currentRevenueCents / 100) / currentMetrics.attendance
     : 0
