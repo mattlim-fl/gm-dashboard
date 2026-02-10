@@ -204,8 +204,9 @@ function calculateDateRanges(): {
 } {
   const now = new Date()
 
-  // Find the most recent Saturday 6am AWST
-  // AWST is UTC+8, so 6am AWST = 22:00 UTC the day before
+  // Find the most recent Saturday using 5am AWST boundaries
+  // Square uses 5am AWST as reporting day boundary (05:00 - 04:59 AWST)
+  // AWST is UTC+8, so 5am AWST = 21:00 UTC the day before
   const currentSaturdayStart = new Date(now)
 
   // Get current day of week (0 = Sunday, 6 = Saturday)
@@ -219,11 +220,11 @@ function calculateDateRanges(): {
   // Go back to Saturday
   currentSaturdayStart.setUTCDate(currentSaturdayStart.getUTCDate() - daysSinceSaturday)
 
-  // Set to Friday 22:00 UTC (= Saturday 6am AWST)
+  // Set to Friday 21:00 UTC (= Saturday 5am AWST)
   currentSaturdayStart.setUTCDate(currentSaturdayStart.getUTCDate() - 1)
-  currentSaturdayStart.setUTCHours(22, 0, 0, 0)
+  currentSaturdayStart.setUTCHours(21, 0, 0, 0)
 
-  // End is 24 hours later (Saturday 22:00 UTC = Sunday 6am AWST)
+  // End is 24 hours later (Saturday 21:00 UTC = Sunday 5am AWST)
   const currentSaturdayEnd = new Date(currentSaturdayStart.getTime() + 24 * 60 * 60 * 1000)
 
   // If the current Saturday hasn't ended yet, use the previous Saturday
