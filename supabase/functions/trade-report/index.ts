@@ -239,12 +239,11 @@ function calculateDateRanges(): {
   const previousSaturdayEnd = new Date(currentSaturdayEnd)
   previousSaturdayEnd.setUTCDate(previousSaturdayEnd.getUTCDate() - 7)
 
-  // Year-over-Year: same Saturday, one year ago
-  const yearAgoStart = new Date(currentSaturdayStart)
-  yearAgoStart.setUTCFullYear(yearAgoStart.getUTCFullYear() - 1)
-
-  const yearAgoEnd = new Date(currentSaturdayEnd)
-  yearAgoEnd.setUTCFullYear(yearAgoEnd.getUTCFullYear() - 1)
+  // Year-over-Year: same Saturday, 52 weeks ago (364 days)
+  // Using 52 weeks instead of 1 year preserves the day-of-week alignment
+  // (subtracting 1 year would land on a different day since calendars don't align)
+  const yearAgoStart = new Date(currentSaturdayStart.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+  const yearAgoEnd = new Date(currentSaturdayEnd.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
 
   // 4-week average: weeks 2, 3, 4, 5 (excluding current week which is week 1)
   const avgWeeks: Array<{ start: Date; end: Date }> = []
