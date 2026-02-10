@@ -43,6 +43,13 @@ interface WeeklySummaryData {
     attendance: number
     spendPerHead: number
   }
+  yearAgo: {
+    barRevenue: number
+    doorRevenue: number
+    totalRevenue: number
+    attendance: number
+    spendPerHead: number
+  }
   changes: {
     barRevenuePercent: number
     doorRevenuePercent: number
@@ -54,6 +61,11 @@ interface WeeklySummaryData {
     totalRevenueVsAvg: number
     attendanceVsAvg: number
     spendPerHeadVsAvg: number
+    barRevenueYoY: number
+    doorRevenueYoY: number
+    totalRevenueYoY: number
+    attendanceYoY: number
+    spendPerHeadYoY: number
   }
 }
 
@@ -185,6 +197,8 @@ function calculateDateRanges(): {
   currentWeekEnd: Date
   previousWeekStart: Date
   previousWeekEnd: Date
+  yearAgoStart: Date
+  yearAgoEnd: Date
   // 4 weeks for averaging (weeks 2, 3, 4, 5 - excluding current week)
   avgWeeks: Array<{ start: Date; end: Date }>
 } {
@@ -225,6 +239,13 @@ function calculateDateRanges(): {
   const previousSaturdayEnd = new Date(currentSaturdayEnd)
   previousSaturdayEnd.setUTCDate(previousSaturdayEnd.getUTCDate() - 7)
 
+  // Year-over-Year: same Saturday, one year ago
+  const yearAgoStart = new Date(currentSaturdayStart)
+  yearAgoStart.setUTCFullYear(yearAgoStart.getUTCFullYear() - 1)
+
+  const yearAgoEnd = new Date(currentSaturdayEnd)
+  yearAgoEnd.setUTCFullYear(yearAgoEnd.getUTCFullYear() - 1)
+
   // 4-week average: weeks 2, 3, 4, 5 (excluding current week which is week 1)
   const avgWeeks: Array<{ start: Date; end: Date }> = []
   for (let i = 1; i <= 4; i++) {
@@ -240,6 +261,8 @@ function calculateDateRanges(): {
     currentWeekEnd: currentSaturdayEnd,
     previousWeekStart: previousSaturdayStart,
     previousWeekEnd: previousSaturdayEnd,
+    yearAgoStart,
+    yearAgoEnd,
     avgWeeks,
   }
 }
@@ -250,16 +273,17 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
   // Use the same RPC functions as the dashboard for consistency
   const venueFilter = null // All venues
 
-  // Fetch current and previous week, plus 4 weeks for averaging
-  const [currentMetrics, previousMetrics, ...avgWeekMetrics] = await Promise.all([
+  // Fetch current, previous, year-ago week, plus 4 weeks for averaging
+  const [currentMetrics, previousMetrics, yearAgoMetrics, ...avgWeekMetrics] = await Promise.all([
     fetchPeriodMetrics(supabase, dateRanges.currentWeekStart, dateRanges.currentWeekEnd, venueFilter),
     fetchPeriodMetrics(supabase, dateRanges.previousWeekStart, dateRanges.previousWeekEnd, venueFilter),
+    fetchPeriodMetrics(supabase, dateRanges.yearAgoStart, dateRanges.yearAgoEnd, venueFilter),
     ...dateRanges.avgWeeks.map(week =>
       fetchPeriodMetrics(supabase, week.start, week.end, venueFilter)
     ),
   ])
 
-  // Check for errors (consolidated error handling)
+  // Check for errors (consolidated error handling) - year-ago errors are non-fatal
   const errors = [
     { period: 'current week', error: currentMetrics.error },
     { period: 'previous week', error: previousMetrics.error },
@@ -287,12 +311,15 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
     return sum + spendPerHead
   }, 0) / weekCount
 
-  // Calculate spend per head for current and previous periods
+  // Calculate spend per head for current, previous, and year-ago periods
   const currentSpendPerHead = currentMetrics.attendance > 0
     ? currentMetrics.revenue / currentMetrics.attendance
     : 0
   const previousSpendPerHead = previousMetrics.attendance > 0
     ? previousMetrics.revenue / previousMetrics.attendance
+    : 0
+  const yearAgoSpendPerHead = yearAgoMetrics.attendance > 0
+    ? yearAgoMetrics.revenue / yearAgoMetrics.attendance
     : 0
 
   // Calculate Saturday labels for each period
@@ -314,6 +341,13 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
   const totalRevenueVsAvg = calculatePercentChange(currentMetrics.revenue, avgTotalRevenue)
   const attendanceVsAvg = calculatePercentChange(currentMetrics.attendance, avgAttendance)
   const spendPerHeadVsAvg = calculatePercentChange(currentSpendPerHead, avgSpendPerHead)
+
+  // Calculate Year-over-Year percentage changes
+  const barRevenueYoY = calculatePercentChange(currentMetrics.barRevenue, yearAgoMetrics.barRevenue)
+  const doorRevenueYoY = calculatePercentChange(currentMetrics.doorRevenue, yearAgoMetrics.doorRevenue)
+  const totalRevenueYoY = calculatePercentChange(currentMetrics.revenue, yearAgoMetrics.revenue)
+  const attendanceYoY = calculatePercentChange(currentMetrics.attendance, yearAgoMetrics.attendance)
+  const spendPerHeadYoY = calculatePercentChange(currentSpendPerHead, yearAgoSpendPerHead)
 
   return {
     period: {
@@ -342,6 +376,13 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
       attendance: avgAttendance,
       spendPerHead: avgSpendPerHead,
     },
+    yearAgo: {
+      barRevenue: yearAgoMetrics.barRevenue,
+      doorRevenue: yearAgoMetrics.doorRevenue,
+      totalRevenue: yearAgoMetrics.revenue,
+      attendance: yearAgoMetrics.attendance,
+      spendPerHead: yearAgoSpendPerHead,
+    },
     changes: {
       barRevenuePercent,
       doorRevenuePercent,
@@ -353,6 +394,11 @@ async function fetchWeeklySummaryData(supabase: any): Promise<WeeklySummaryData>
       totalRevenueVsAvg,
       attendanceVsAvg,
       spendPerHeadVsAvg,
+      barRevenueYoY,
+      doorRevenueYoY,
+      totalRevenueYoY,
+      attendanceYoY,
+      spendPerHeadYoY,
     },
   }
 }
@@ -507,6 +553,8 @@ function generateEmailHtml(data: WeeklySummaryData): string {
 
   // 4-week average is always available (we have the data)
   const avgDataAvailable = data.fourWeekAvg.totalRevenue > 0 || data.current.totalRevenue === 0
+  // YoY data may not be available if no data from a year ago
+  const yoyDataAvailable = data.yearAgo.totalRevenue > 0 || data.current.totalRevenue === 0
 
   // Build table rows - all metrics are "positive = good"
   const rows = [
@@ -515,30 +563,35 @@ function generateEmailHtml(data: WeeklySummaryData): string {
       value: formatCurrency(data.current.barRevenue),
       wow: generateIndicator(data.changes.barRevenuePercent, true),
       vsAvg: generateIndicator(data.changes.barRevenueVsAvg, avgDataAvailable),
+      yoy: generateIndicator(data.changes.barRevenueYoY, yoyDataAvailable),
     },
     {
       metric: 'Door Revenue',
       value: formatCurrency(data.current.doorRevenue),
       wow: generateIndicator(data.changes.doorRevenuePercent, true),
       vsAvg: generateIndicator(data.changes.doorRevenueVsAvg, avgDataAvailable),
+      yoy: generateIndicator(data.changes.doorRevenueYoY, yoyDataAvailable),
     },
     {
       metric: 'Total Revenue',
       value: formatCurrency(data.current.totalRevenue),
       wow: generateIndicator(data.changes.totalRevenuePercent, true),
       vsAvg: generateIndicator(data.changes.totalRevenueVsAvg, avgDataAvailable),
+      yoy: generateIndicator(data.changes.totalRevenueYoY, yoyDataAvailable),
     },
     {
       metric: 'Attendance',
       value: data.current.attendance.toLocaleString(),
       wow: generateIndicator(data.changes.attendancePercent, true),
       vsAvg: generateIndicator(data.changes.attendanceVsAvg, avgDataAvailable),
+      yoy: generateIndicator(data.changes.attendanceYoY, yoyDataAvailable),
     },
     {
       metric: 'Spend Per Head',
       value: formatCurrency(data.current.spendPerHead),
       wow: generateIndicator(data.changes.spendPerHeadPercent, true),
       vsAvg: generateIndicator(data.changes.spendPerHeadVsAvg, avgDataAvailable),
+      yoy: generateIndicator(data.changes.spendPerHeadYoY, yoyDataAvailable),
     },
   ]
 
@@ -550,6 +603,7 @@ function generateEmailHtml(data: WeeklySummaryData): string {
       <td style="padding:14px 16px;${borderStyle}font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:#1a1a2e;">${row.value}</td>
       <td style="padding:14px 16px;${borderStyle}">${row.wow}</td>
       <td style="padding:14px 16px;${borderStyle}">${row.vsAvg}</td>
+      <td style="padding:14px 16px;${borderStyle}">${row.yoy}</td>
     </tr>`
   }).join('\n')
 
@@ -563,7 +617,7 @@ function generateEmailHtml(data: WeeklySummaryData): string {
 <body style="margin:0;padding:0;background-color:#f0f2f5;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f0f2f5;">
 <tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="700" cellspacing="0" cellpadding="0" style="max-width:700px;width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08),0 8px 24px rgba(0,0,0,0.04);">
+<table role="presentation" width="800" cellspacing="0" cellpadding="0" style="max-width:800px;width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08),0 8px 24px rgba(0,0,0,0.04);">
 <tr><td style="padding:32px;">
 
 <h1 style="margin:0 0 8px 0;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;font-size:20px;font-weight:700;color:#1a1a2e;">Saturday Trade Report</h1>
@@ -576,6 +630,7 @@ function generateEmailHtml(data: WeeklySummaryData): string {
   <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">This Week</th>
   <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Week</th>
   <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs 4-Week Avg</th>
+  <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:#64748b;border-bottom:2px solid #e2e8f0;">vs Last Year</th>
 </tr>
 </thead>
 <tbody>
