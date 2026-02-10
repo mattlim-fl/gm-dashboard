@@ -452,12 +452,10 @@ function calculateDateRanges(): {
 
   const previousEnd = new Date(currentStart.getTime() - 1)
 
-  // Year-over-Year: same period, one year ago
-  const yearAgoStart = new Date(currentStart)
-  yearAgoStart.setFullYear(yearAgoStart.getFullYear() - 1)
-
-  const yearAgoEnd = new Date(now)
-  yearAgoEnd.setFullYear(yearAgoEnd.getFullYear() - 1)
+  // Year-over-Year: same period, 52 weeks ago (364 days)
+  // Using 52 weeks instead of 1 year preserves the day-of-week alignment
+  const yearAgoStart = new Date(currentStart.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+  const yearAgoEnd = new Date(now.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
 
   // 4-week average: weeks 2, 3, 4, 5 (excluding current week which is week 1)
   const avgWeeks: Array<{ start: Date; end: Date }> = []
