@@ -11,8 +11,8 @@ import {
   extractSquareError,
 } from './schemas.ts'
 
-// Square API base URL - use sandbox for development
-const SQUARE_API_BASE = 'https://connect.squareupsandbox.com'
+// Square API base URL - production
+const SQUARE_API_BASE = 'https://connect.squareup.com'
 const SQUARE_API_VERSION = '2023-10-18'
 
 // Default retry options for Square API calls
