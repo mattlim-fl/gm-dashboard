@@ -83,7 +83,7 @@ export const bookingService = {
       throw new Error('User not authenticated');
     }
 
-    if (!data.ticketQuantity || !data.costPerTicket) {
+    if (data.ticketQuantity == null || data.costPerTicket == null) {
       throw new Error('Ticket quantity and cost per ticket are required for VIP bookings');
     }
 

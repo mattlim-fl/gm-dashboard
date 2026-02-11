@@ -35,7 +35,7 @@ const addMemberSchema = z.object({
   }),
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().min(8, "Please enter a valid phone number"),
-  date_of_birth: z.string().min(1, "Date of birth is required"),
+  date_of_birth: z.string().optional(),
 });
 
 type AddMemberFormValues = z.infer<typeof addMemberSchema>;
@@ -65,7 +65,7 @@ export function AddMemberDialog({ isOpen, onClose, defaultVenue }: AddMemberDial
         venue: data.venue,
         name: data.name,
         phone: data.phone,
-        date_of_birth: data.date_of_birth,
+        ...(data.date_of_birth && { date_of_birth: data.date_of_birth }),
       });
 
       form.reset();
@@ -147,7 +147,7 @@ export function AddMemberDialog({ isOpen, onClose, defaultVenue }: AddMemberDial
               name="date_of_birth"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Date of Birth *</FormLabel>
+                  <FormLabel>Date of Birth</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>

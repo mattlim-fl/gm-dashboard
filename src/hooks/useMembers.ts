@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { memberService, MemberInsert, MemberUpdate, MemberFilters } from '@/services/memberService';
+import { memberService, MemberInsert, MemberUpdate, MemberFilters, Venue, MemberWithCheckin } from '@/services/memberService';
 import { useToast } from '@/hooks/use-toast';
+
+export type { MemberWithCheckin };
 
 export const useMembers = (filters?: MemberFilters) => {
   return useQuery({
@@ -91,6 +93,31 @@ export const useRecordFirstVisit = () => {
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+};
+
+export const useMembersWithCheckins = (date: string, venue?: Venue) => {
+  return useQuery({
+    queryKey: ['members', 'checkins', date, venue],
+    queryFn: () => memberService.fetchMembersWithCheckins(date, venue),
+    enabled: !!date,
+  });
+};
+
+export const useToggleMemberCheckin = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ memberId, date, isCurrentlyChecked }: { memberId: string; date: string; isCurrentlyChecked: boolean }) => {
+      if (isCurrentlyChecked) {
+        await memberService.uncheckMember(memberId, date);
+      } else {
+        await memberService.checkInMember(memberId, date);
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['members', 'checkins', variables.date] });
     },
   });
 };

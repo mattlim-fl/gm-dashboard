@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, Search, Pencil, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, Pencil, Check, X, Star, UserPlus } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { MemberWithCheckin } from '@/hooks/useMembers';
+import { Member } from '@/services/memberService';
 
 export interface RunSheetGuestItem {
   id: string;
@@ -16,6 +17,7 @@ export interface RunSheetGuestItem {
   isChecked: boolean;
   isOrganiser: boolean;
   organiserName: string | null;
+  venue?: string;
   booking: any;
 }
 
@@ -29,13 +31,18 @@ interface GuestListGroupedRunSheetProps {
   onCancelEditGuest: () => void;
   onToggleCheckin: (bookingId: string, ticketIndex: number, currentChecked: boolean) => void;
   onSetEditingGuestName: (name: string) => void;
+  // Member props
+  members?: MemberWithCheckin[];
+  showMembers?: boolean;
+  onMemberToggleCheckin?: (memberId: string, isChecked: boolean) => void;
+  onMemberClick?: (member: Member) => void;
+  onAddMember?: () => void;
 }
 
-interface GroupedGuests {
-  organiser: RunSheetGuestItem[];
-  organiserGuests: RunSheetGuestItem[];
-  purchasers: RunSheetGuestItem[];
-}
+// Unified row type for both guests and members
+type UnifiedRow =
+  | { type: 'guest'; data: RunSheetGuestItem }
+  | { type: 'member'; data: MemberWithCheckin };
 
 export default function GuestListGroupedRunSheet({
   guests,
@@ -47,56 +54,58 @@ export default function GuestListGroupedRunSheet({
   onCancelEditGuest,
   onToggleCheckin,
   onSetEditingGuestName,
+  members = [],
+  showMembers = false,
+  onMemberToggleCheckin,
+  onMemberClick,
+  onAddMember,
 }: GuestListGroupedRunSheetProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedSections, setExpandedSections] = useState({
-    organiser: true,
-    organiserGuests: true,
-    purchasers: true,
-  });
+  const [isExpanded, setIsExpanded] = useState(true);
 
-  // Categorize and filter guests
-  const { organiser, organiserGuests, purchasers } = useMemo(() => {
-    const grouped: GroupedGuests = {
-      organiser: [],
-      organiserGuests: [],
-      purchasers: [],
-    };
+  // Create unified list of guests and members
+  const unifiedList = useMemo(() => {
+    const rows: UnifiedRow[] = [];
 
+    // Add guests
     guests.forEach((guest) => {
       // Filter by search query
       if (searchQuery && !guest.guestName.toLowerCase().includes(searchQuery.toLowerCase())) {
         return;
       }
-
-      // Categorize
-      if (guest.isOrganiser) {
-        grouped.organiser.push(guest);
-      } else if (
-        guest.organiserName === 'Staff Added' ||
-        guest.organiserName?.toLowerCase().includes('staff') ||
-        guest.organiserName?.toLowerCase().includes('walk-in')
-      ) {
-        grouped.organiserGuests.push(guest);
-      } else {
-        // Check if this guest's booking is from the organiser
-        // For now, we'll put all non-staff guests in purchasers
-        // You may need to adjust this logic based on your data structure
-        grouped.purchasers.push(guest);
-      }
+      rows.push({ type: 'guest', data: guest });
     });
 
-    return grouped;
-  }, [guests, searchQuery]);
+    // Add members if enabled
+    if (showMembers) {
+      members.forEach((member) => {
+        // Filter by search query
+        if (searchQuery &&
+            !member.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+            !member.phone.includes(searchQuery)) {
+          return;
+        }
+        rows.push({ type: 'member', data: member });
+      });
+    }
 
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
-  };
+    return rows;
+  }, [guests, members, showMembers, searchQuery]);
 
-  const renderGuestRow = (guest: RunSheetGuestItem, idx: number, globalIdx: number) => {
+  const totalCheckedIn = useMemo(() => {
+    return unifiedList.filter((row) => {
+      if (row.type === 'guest') return row.data.isChecked;
+      if (row.type === 'member') return row.data.isCheckedIn;
+      return false;
+    }).length;
+  }, [unifiedList]);
+
+  const guestCount = guests.filter(g => !searchQuery || g.guestName.toLowerCase().includes(searchQuery.toLowerCase())).length;
+  const memberCount = showMembers ? members.filter(m => !searchQuery || m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.phone.includes(searchQuery)).length : 0;
+
+  const renderGuestRow = (guest: RunSheetGuestItem, idx: number) => {
+    const venue = guest.booking?.venue || guest.venue || '-';
+
     return (
       <tr
         key={guest.id}
@@ -104,7 +113,7 @@ export default function GuestListGroupedRunSheet({
           guest.isChecked ? 'opacity-60 bg-muted/20' : ''
         }`}
       >
-        <td className="py-3 px-4 text-sm text-muted-foreground">{globalIdx + 1}</td>
+        <td className="py-3 px-4 text-sm text-muted-foreground">{idx + 1}</td>
         <td className="py-3 px-4">
           <div className="flex items-center gap-2">
             {editingGuestId === guest.id ? (
@@ -171,7 +180,10 @@ export default function GuestListGroupedRunSheet({
           <span className="text-sm font-mono text-muted-foreground">{guest.referenceCode}</span>
         </td>
         <td className="py-3 px-4">
-          <span className="text-sm text-muted-foreground">{guest.organiserName || 'Unknown'}</span>
+          <span className="text-sm text-muted-foreground">{guest.organiserName || '-'}</span>
+        </td>
+        <td className="py-3 px-4">
+          <span className="text-sm text-muted-foreground capitalize">{venue}</span>
         </td>
         <td className="py-3 px-4 text-right">
           <Checkbox
@@ -184,66 +196,55 @@ export default function GuestListGroupedRunSheet({
     );
   };
 
-  const renderGuestSection = (
-    title: string,
-    guestList: RunSheetGuestItem[],
-    sectionKey: keyof typeof expandedSections,
-    startIdx: number
-  ) => {
-    if (guestList.length === 0 && !searchQuery) return null;
-
-    const isExpanded = expandedSections[sectionKey];
-    const checkedCount = guestList.filter((g) => g.isChecked).length;
-
+  const renderMemberRow = (member: MemberWithCheckin, idx: number) => {
     return (
-      <Collapsible open={isExpanded} onOpenChange={() => toggleSection(sectionKey)} className="mb-4">
-        <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors">
-            <div className="flex items-center gap-2">
-              <h4 className="font-semibold text-sm uppercase tracking-wide text-foreground">{title}</h4>
-              <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                {guestList.length}
-              </Badge>
-              {checkedCount > 0 && (
-                <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                  {checkedCount} checked in
-                </Badge>
-              )}
-            </div>
-            {isExpanded ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
+      <tr
+        key={`member-${member.id}`}
+        className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors cursor-pointer ${
+          member.isCheckedIn ? 'opacity-60 bg-muted/20' : ''
+        }`}
+        onClick={() => onMemberClick?.(member)}
+      >
+        <td className="py-3 px-4 text-sm text-muted-foreground">{idx + 1}</td>
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />
+            <span className={`text-sm font-medium ${member.isCheckedIn ? 'text-muted-foreground line-through' : ''}`}>
+              {member.name}
+            </span>
           </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          {guestList.length === 0 ? (
-            <div className="py-4 text-center text-sm text-muted-foreground">No guests match your search</div>
-          ) : (
-            <div className="border rounded-lg overflow-hidden mt-2">
-              <table className="w-full">
-                <thead className="bg-muted/50 border-b">
-                  <tr>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground w-12">#</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Name</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Reference</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Organiser</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground">Check-in</th>
-                  </tr>
-                </thead>
-                <tbody>{guestList.map((guest, idx) => renderGuestRow(guest, idx, startIdx + idx))}</tbody>
-              </table>
-            </div>
-          )}
-        </CollapsibleContent>
-      </Collapsible>
+        </td>
+        <td className="py-3 px-4">
+          <span className="text-sm text-muted-foreground">-</span>
+        </td>
+        <td className="py-3 px-4">
+          <span className="text-sm text-muted-foreground">-</span>
+        </td>
+        <td className="py-3 px-4">
+          <span className="text-sm text-muted-foreground capitalize">{member.venue}</span>
+        </td>
+        <td className="py-3 px-4 text-right">
+          <Checkbox
+            checked={member.isCheckedIn}
+            onCheckedChange={(e) => {
+              e.stopPropagation?.();
+              onMemberToggleCheckin?.(member.id, member.isCheckedIn);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto"
+          />
+        </td>
+      </tr>
     );
   };
 
-  const totalGuests = guests.length;
-  const filteredCount = organiser.length + organiserGuests.length + purchasers.length;
-  const totalCheckedIn = guests.filter((g) => g.isChecked).length;
+  const renderUnifiedRow = (row: UnifiedRow, idx: number) => {
+    if (row.type === 'guest') {
+      return renderGuestRow(row.data, idx);
+    } else {
+      return renderMemberRow(row.data, idx);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -253,38 +254,81 @@ export default function GuestListGroupedRunSheet({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search guests by name..."
+            placeholder="Search by name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
           />
         </div>
+        {onAddMember && showMembers && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={onAddMember}
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Member
+          </Button>
+        )}
       </div>
 
       {/* Results Summary */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div>
-          {searchQuery ? `Showing ${filteredCount} of ${totalGuests} guests` : `${totalGuests} total guests`}
+          {guestCount} guests{showMembers ? ` + ${memberCount} members` : ''}
         </div>
         <div>
-          {totalCheckedIn} / {totalGuests} checked in
+          {totalCheckedIn} / {unifiedList.length} checked in
         </div>
       </div>
 
-      {/* Guest Sections */}
-      {renderGuestSection('ORGANISER', organiser, 'organiser', 0)}
-      {renderGuestSection('ORGANISER GUESTS', organiserGuests, 'organiserGuests', organiser.length)}
-      {renderGuestSection(
-        'GUEST LIST PURCHASERS',
-        purchasers,
-        'purchasers',
-        organiser.length + organiserGuests.length
-      )}
+      {/* Unified List */}
+      {unifiedList.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg">
+          {searchQuery ? 'No results match your search' : 'No guests or members found for this date.'}
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <div
+            className="flex items-center justify-between p-3 bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold text-sm uppercase tracking-wide text-foreground">Guest List</h4>
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                {unifiedList.length}
+              </Badge>
+              {totalCheckedIn > 0 && (
+                <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  {totalCheckedIn} checked in
+                </Badge>
+              )}
+            </div>
+            {isExpanded ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
 
-      {/* Empty State */}
-      {filteredCount === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          {searchQuery ? 'No guests match your search' : 'No guests found for this date.'}
+          {isExpanded && (
+            <table className="w-full">
+              <thead className="bg-muted/30 border-t border-b">
+                <tr>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground w-12">#</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Name</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Reference</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Organiser</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Venue</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground">Check-in</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unifiedList.map((row, idx) => renderUnifiedRow(row, idx))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

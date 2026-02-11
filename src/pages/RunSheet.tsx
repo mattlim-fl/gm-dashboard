@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useBookings } from "@/hooks/useBookings";
 import { updateVipTicketCheckins, BookingRow } from "@/services/bookingService";
 import { formatDateToISO } from "@/utils/dateUtils";
-import { CheckCheck, Search, Users, Mic2, Calendar, ArrowLeft, UserPlus, Star, Pencil, Check, X, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, Users, Mic2, ArrowLeft, Star } from "lucide-react";
 import { QuickAddBookingDialog } from "@/components/bookings/QuickAddBookingDialog";
 import { BookingDetailsSidebar } from "@/components/bookings/BookingDetailsSidebar";
-import { customerService, CustomerRow } from "@/services/customerService";
-import { memberService, Member } from "@/services/memberService";
+import { Member } from "@/services/memberService";
+import { useMembersWithCheckins, useToggleMemberCheckin } from "@/hooks/useMembers";
 import { AddMemberDialog } from "@/components/members/AddMemberDialog";
 import { MemberDetailDialog } from "@/components/members/MemberDetailDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,14 +33,13 @@ interface AttendanceState {
 const getStorageKey = (dateISO: string) => `runSheetAttendance:${dateISO}`;
 
 export default function RunSheet() {
-  const [activeTab, setActiveTab] = useState<'guests' | 'karaoke' | 'members'>('guests');
+  const [activeTab, setActiveTab] = useState<'guests' | 'karaoke'>('guests');
   const [selectedDate, setSelectedDate] = useState<string>(formatDateToISO(new Date()));
   const [search, setSearch] = useState<string>("");
   const [venue, setVenue] = useState<VenueFilter>('all');
   const [attendance, setAttendance] = useState<AttendanceState>({ vip: {}, karaoke: {} });
   const [showCheckedOff, setShowCheckedOff] = useState<boolean>(false);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [showMembers, setShowMembers] = useState<boolean>(true);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
 
   // Editing
@@ -50,11 +50,7 @@ export default function RunSheet() {
   const [editingGuestId, setEditingGuestId] = useState<string | null>(null);
   const [editingGuestName, setEditingGuestName] = useState<string>("");
   const [savingGuestName, setSavingGuestName] = useState(false);
-  
-  // Sorting
-  const [sortField, setSortField] = useState<'name' | 'reference' | 'organiser' | 'checked' | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  
+
   // Member management
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isMemberProfileOpen, setIsMemberProfileOpen] = useState(false);
@@ -87,27 +83,12 @@ export default function RunSheet() {
     localStorage.setItem(getStorageKey(selectedDate), JSON.stringify(attendance));
   }, [attendance, selectedDate]);
 
-  // Fetch Members when tab is active
-  const fetchMembers = async () => {
-    if (activeTab === 'members') {
-      setLoadingMembers(true);
-      try {
-        const membersData = await memberService.fetchMembers({
-          search: search || undefined,
-          status: 'active',
-        });
-        setMembers(membersData);
-      } catch (error) {
-        console.error('Error fetching members:', error);
-      } finally {
-        setLoadingMembers(false);
-      }
-    }
-  };
-
-  useEffect(() => {
-    fetchMembers();
-  }, [activeTab, search]); // Re-fetch on search change for server-side search
+  // Fetch members with check-in status
+  const { data: membersWithCheckins = [], refetch: refetchMembers } = useMembersWithCheckins(
+    selectedDate,
+    venue === 'all' ? undefined : venue
+  );
+  const toggleMemberCheckin = useToggleMemberCheckin();
 
   const guestFilters = useMemo(() => ({
     bookingType: 'vip_tickets',
@@ -144,6 +125,10 @@ export default function RunSheet() {
   const checkedKaraoke = useMemo(() => karaokeBookings.reduce((sum, b) => sum + (attendance.karaoke[b.id] ? 1 : 0), 0), [karaokeBookings, attendance.karaoke]);
   const karaokePercent = totalKaraoke > 0 ? Math.round((checkedKaraoke / totalKaraoke) * 100) : 0;
 
+  // Member stats
+  const totalMembers = membersWithCheckins.length;
+  const checkedMembers = useMemo(() => membersWithCheckins.filter(m => m.isCheckedIn).length, [membersWithCheckins]);
+
   const isToday = selectedDate === formatDateToISO(new Date());
 
   // Handlers
@@ -174,6 +159,10 @@ export default function RunSheet() {
     setAttendance(prev => ({ ...prev, karaoke: { ...prev.karaoke, [bookingId]: checked } }));
   };
 
+  const handleMemberToggle = (memberId: string, isCurrentlyChecked: boolean) => {
+    toggleMemberCheckin.mutate({ memberId, date: selectedDate, isCurrentlyChecked });
+  };
+
   const handleBookingClick = (booking: BookingRow) => {
     setSelectedBooking(booking);
     setIsEditSidebarOpen(true);
@@ -181,22 +170,6 @@ export default function RunSheet() {
 
   const handleBackToToday = () => {
     setSelectedDate(formatDateToISO(new Date()));
-  };
-
-  const handleSort = (field: 'name' | 'reference' | 'organiser' | 'checked') => {
-    if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const getSortIcon = (field: 'name' | 'reference' | 'organiser' | 'checked') => {
-    if (sortField !== field) return null;
-    return sortDirection === 'asc' ? 
-      <ChevronUp className="h-4 w-4 ml-1 inline-block" /> : 
-      <ChevronDown className="h-4 w-4 ml-1 inline-block" />;
   };
 
   const handleStartEditGuest = (guestId: string, currentName: string) => {
@@ -390,31 +363,41 @@ export default function RunSheet() {
              </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 h-10">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'guests' | 'karaoke')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 h-10">
               <TabsTrigger value="guests">Guests ({totalVipTickets})</TabsTrigger>
               <TabsTrigger value="karaoke">Karaoke ({karaokeBookings.length})</TabsTrigger>
-              <TabsTrigger value="members" className="gap-1.5">
-                 <Star className="h-3.5 w-3.5" /> Members
-              </TabsTrigger>
             </TabsList>
           </Tabs>
           
           <div className="flex justify-between items-center px-1">
              <div className="text-xs text-muted-foreground font-medium">
-               {activeTab === 'guests' && `${checkedVipTickets} checked in`}
+               {activeTab === 'guests' && `${checkedVipTickets}${showMembers ? ` + ${checkedMembers}` : ''} checked in`}
                {activeTab === 'karaoke' && `${checkedKaraoke} checked in`}
-               {activeTab === 'members' && `${members.length} found`}
              </div>
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="showChecked" 
-                checked={showCheckedOff} 
-                onCheckedChange={(c) => setShowCheckedOff(!!c)} 
-              />
-              <label htmlFor="showChecked" className="text-sm text-muted-foreground cursor-pointer select-none">
-                Show checked
-              </label>
+            <div className="flex items-center gap-4">
+              {activeTab === 'guests' && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="showMembers"
+                    checked={showMembers}
+                    onCheckedChange={setShowMembers}
+                  />
+                  <label htmlFor="showMembers" className="text-sm text-muted-foreground cursor-pointer select-none flex items-center gap-1">
+                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" /> Members
+                  </label>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="showChecked"
+                  checked={showCheckedOff}
+                  onCheckedChange={(c) => setShowCheckedOff(!!c)}
+                />
+                <label htmlFor="showChecked" className="text-sm text-muted-foreground cursor-pointer select-none">
+                  Show checked
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -486,7 +469,8 @@ export default function RunSheet() {
                   }
                 });
 
-                if (flatGuests.length === 0) {
+                // Show empty state only if no guests AND (members hidden OR no members)
+                if (flatGuests.length === 0 && (!showMembers || membersWithCheckins.length === 0)) {
                   return (
                     <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg">
                       No guests found for this date.
@@ -510,6 +494,14 @@ export default function RunSheet() {
                       }
                     }}
                     onSetEditingGuestName={setEditingGuestName}
+                    members={membersWithCheckins}
+                    showMembers={showMembers}
+                    onMemberToggleCheckin={handleMemberToggle}
+                    onMemberClick={(member) => {
+                      setSelectedMember(member);
+                      setIsMemberProfileOpen(true);
+                    }}
+                    onAddMember={() => setIsAddMemberOpen(true)}
                   />
                 );
               })()}
@@ -558,69 +550,14 @@ export default function RunSheet() {
             </div>
           )}
 
-          {activeTab === 'members' && (
-            <div className="space-y-4">
-              {/* Add Member Helper */}
-              <Card className="bg-indigo-50 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/20">
-                <CardContent className="p-4 flex items-center justify-between">
-                   <div className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">
-                     Members
-                   </div>
-                   <Button size="sm" onClick={() => setIsAddMemberOpen(true)}>
-                     <UserPlus className="h-4 w-4 mr-1" />
-                     Add Member
-                   </Button>
-                </CardContent>
-              </Card>
-
-              <AddMemberDialog
-                isOpen={isAddMemberOpen}
-                onClose={() => {
-                  setIsAddMemberOpen(false);
-                  fetchMembers();
-                }}
-              />
-
-              {members.length === 0 && !loadingMembers && (
-                <div className="text-center py-10 text-muted-foreground">No members found matching your search.</div>
-              )}
-
-              <div className="grid grid-cols-1 gap-3">
-                {members.map(member => (
-                  <Card key={member.id} className="bg-card border-l-4 border-l-indigo-400">
-                    <CardContent className="p-3 flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="font-bold text-base flex items-center gap-2">
-                          {member.name}
-                          <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                          {!member.first_visit_date && (
-                            <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
-                              NEW
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">{member.phone}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{member.venue}</div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                         <Button
-                           size="sm"
-                           variant="outline"
-                           className="h-7 text-xs"
-                           onClick={() => {
-                             setSelectedMember(member);
-                             setIsMemberProfileOpen(true);
-                           }}
-                         >
-                           Profile
-                         </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Add Member Dialog - kept for adding new members */}
+          <AddMemberDialog
+            isOpen={isAddMemberOpen}
+            onClose={() => {
+              setIsAddMemberOpen(false);
+              refetchMembers();
+            }}
+          />
         </div>
 
         <BookingDetailsSidebar 
