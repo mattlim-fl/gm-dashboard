@@ -8,6 +8,7 @@ export interface KaraokeBoothRow {
   capacity: number;
   hourly_rate: number;
   is_available: boolean;
+  is_archived: boolean;
   maintenance_notes: string | null;
   operating_hours_start: string; // TIME format "HH:MM"
   operating_hours_end: string;   // TIME format "HH:MM"
@@ -22,6 +23,7 @@ export interface KaraokeBoothInsert {
   capacity?: number;
   hourly_rate?: number;
   is_available?: boolean;
+  is_archived?: boolean;
   maintenance_notes?: string | null;
   operating_hours_start?: string;
   operating_hours_end?: string;
@@ -36,6 +38,7 @@ export interface KaraokeBoothUpdate {
   capacity?: number;
   hourly_rate?: number;
   is_available?: boolean;
+  is_archived?: boolean;
   maintenance_notes?: string | null;
   operating_hours_start?: string;
   operating_hours_end?: string;
@@ -178,6 +181,7 @@ export interface KaraokeBookingFilters {
 export interface KaraokeBoothFilters {
   venue?: 'manor' | 'hippie' | 'all';
   is_available?: boolean;
+  is_archived?: boolean;
   search?: string;
 }
 

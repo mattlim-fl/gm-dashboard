@@ -25,11 +25,28 @@ export const karaokeService = {
    */
   async getKaraokeBooths(filters?: KaraokeBoothFilters): Promise<KaraokeBoothRow[]> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('karaoke_booths')
         .select('*')
         .order('venue', { ascending: true })
         .order('name', { ascending: true });
+
+      // By default, don't show archived booths unless explicitly requested
+      if (filters?.is_archived === true) {
+        query = query.eq('is_archived', true);
+      } else if (filters?.is_archived === false || filters?.is_archived === undefined) {
+        query = query.eq('is_archived', false);
+      }
+
+      if (filters?.venue && filters.venue !== 'all') {
+        query = query.eq('venue', filters.venue);
+      }
+
+      if (filters?.is_available !== undefined) {
+        query = query.eq('is_available', filters.is_available);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         throw new Error(`Failed to fetch karaoke booths: ${error.message}`);
@@ -110,6 +127,20 @@ export const karaokeService = {
    */
   async toggleBoothAvailability(id: string, is_available: boolean): Promise<KaraokeBoothRow> {
     return this.updateKaraokeBooth(id, { is_available });
+  },
+
+  /**
+   * Archive a karaoke booth (soft delete)
+   */
+  async archiveBooth(id: string): Promise<KaraokeBoothRow> {
+    return this.updateKaraokeBooth(id, { is_archived: true, is_available: false });
+  },
+
+  /**
+   * Restore an archived karaoke booth
+   */
+  async restoreBooth(id: string): Promise<KaraokeBoothRow> {
+    return this.updateKaraokeBooth(id, { is_archived: false });
   },
 
   // ===== KARAOKE BOOKING OPERATIONS =====

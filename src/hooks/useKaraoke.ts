@@ -102,7 +102,7 @@ export const useToggleBoothAvailability = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) => 
+    mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) =>
       karaokeService.toggleBoothAvailability(id, isAvailable),
     onSuccess: (booth) => {
       queryClient.invalidateQueries({ queryKey: ['karaoke-booths'] });
@@ -115,6 +115,60 @@ export const useToggleBoothAvailability = () => {
     onError: (error: Error) => {
       toast({
         title: "Error Updating Availability",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+/**
+ * Hook to archive a booth
+ */
+export const useArchiveBooth = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (id: string) => karaokeService.archiveBooth(id),
+    onSuccess: (booth) => {
+      queryClient.invalidateQueries({ queryKey: ['karaoke-booths'] });
+      queryClient.invalidateQueries({ queryKey: ['karaoke-booth', booth.id] });
+      toast({
+        title: "Booth Archived",
+        description: `${booth.name} has been archived.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error Archiving Booth",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+};
+
+/**
+ * Hook to restore an archived booth
+ */
+export const useRestoreBooth = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (id: string) => karaokeService.restoreBooth(id),
+    onSuccess: (booth) => {
+      queryClient.invalidateQueries({ queryKey: ['karaoke-booths'] });
+      queryClient.invalidateQueries({ queryKey: ['karaoke-booth', booth.id] });
+      toast({
+        title: "Booth Restored",
+        description: `${booth.name} has been restored.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error Restoring Booth",
         description: error.message,
         variant: "destructive",
       });
@@ -355,11 +409,15 @@ export const useBoothManagement = () => {
   const createBooth = useCreateKaraokeBooth();
   const updateBooth = useUpdateKaraokeBooth();
   const toggleAvailability = useToggleBoothAvailability();
+  const archiveBooth = useArchiveBooth();
+  const restoreBooth = useRestoreBooth();
 
   return {
     createBooth,
     updateBooth,
     toggleAvailability,
-    isLoading: createBooth.isPending || updateBooth.isPending || toggleAvailability.isPending,
+    archiveBooth,
+    restoreBooth,
+    isLoading: createBooth.isPending || updateBooth.isPending || toggleAvailability.isPending || archiveBooth.isPending || restoreBooth.isPending,
   };
 }; 

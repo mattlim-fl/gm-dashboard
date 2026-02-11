@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Edit, Trash2, Settings, MapPin, Users, Clock } from "lucide-react";
-import { useKaraokeBooths, useCreateKaraokeBooth, useUpdateKaraokeBooth, useToggleBoothAvailability } from "@/hooks/useKaraoke";
+import { Plus, Edit, Archive, ArchiveRestore, Settings, MapPin, Users, Clock } from "lucide-react";
+import { useKaraokeBooths, useCreateKaraokeBooth, useUpdateKaraokeBooth, useToggleBoothAvailability, useArchiveBooth, useRestoreBooth } from "@/hooks/useKaraoke";
 import { useToast } from "@/hooks/use-toast";
 import { KaraokeBoothRow, KaraokeBoothInsert, KaraokeBoothUpdate } from "@/types/karaoke";
 
@@ -21,14 +21,18 @@ const BoothManagement = () => {
   const [selectedBooth, setSelectedBooth] = useState<KaraokeBoothRow | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [venueFilter, setVenueFilter] = useState<'all' | 'manor' | 'hippie'>('all');
+  const [showArchived, setShowArchived] = useState(false);
 
-  const { data: booths, isLoading } = useKaraokeBooths({ 
+  const { data: booths, isLoading } = useKaraokeBooths({
     venue: venueFilter,
-    search: searchTerm 
+    search: searchTerm,
+    is_archived: showArchived
   });
   const createBooth = useCreateKaraokeBooth();
   const updateBooth = useUpdateKaraokeBooth();
   const toggleAvailability = useToggleBoothAvailability();
+  const archiveBooth = useArchiveBooth();
+  const restoreBooth = useRestoreBooth();
   const { toast } = useToast();
 
   const handleCreateBooth = async (data: KaraokeBoothInsert) => {
@@ -57,6 +61,22 @@ const BoothManagement = () => {
       await toggleAvailability.mutateAsync({ id: boothId, isAvailable });
     } catch (_error) {
       // Silent fail for availability toggle
+    }
+  };
+
+  const handleArchiveBooth = async (boothId: string) => {
+    try {
+      await archiveBooth.mutateAsync(boothId);
+    } catch (_error) {
+      // Error handled by hook
+    }
+  };
+
+  const handleRestoreBooth = async (boothId: string) => {
+    try {
+      await restoreBooth.mutateAsync(boothId);
+    } catch (_error) {
+      // Error handled by hook
     }
   };
 
@@ -151,7 +171,7 @@ const BoothManagement = () => {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
           <div className="flex-1">
             <Input
               placeholder="Search booths by name or venue..."
@@ -170,17 +190,47 @@ const BoothManagement = () => {
               <SelectItem value="hippie">Hippie Club</SelectItem>
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-archived"
+              checked={showArchived}
+              onCheckedChange={setShowArchived}
+            />
+            <Label htmlFor="show-archived" className="text-sm text-gm-neutral-600 cursor-pointer">
+              Show Archived
+            </Label>
+          </div>
         </div>
 
         {/* Booths Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Karaoke Booths</CardTitle>
+            <CardTitle>{showArchived ? 'Archived Booths' : 'Karaoke Booths'}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="text-gm-neutral-500">Loading booths...</div>
+              </div>
+            ) : filteredBooths.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                {showArchived ? (
+                  <>
+                    <Archive className="h-12 w-12 text-gm-neutral-300 mb-4" />
+                    <p className="text-gm-neutral-500">No archived booths</p>
+                    <p className="text-sm text-gm-neutral-400 mt-1">
+                      Archived booths will appear here
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Settings className="h-12 w-12 text-gm-neutral-300 mb-4" />
+                    <p className="text-gm-neutral-500">No booths found</p>
+                    <p className="text-sm text-gm-neutral-400 mt-1">
+                      Create a new booth to get started
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <Table>
@@ -220,27 +270,58 @@ const BoothManagement = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={booth.is_available}
-                            onCheckedChange={(checked) => 
-                              handleToggleAvailability(booth.id, checked)
-                            }
-                          />
-                          <span className={`text-sm ${booth.is_available ? 'text-green-600' : 'text-red-600'}`}>
-                            {booth.is_available ? 'Available' : 'Unavailable'}
-                          </span>
-                        </div>
+                        {showArchived ? (
+                          <Badge variant="secondary" className="bg-gray-100 text-gray-600">
+                            Archived
+                          </Badge>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={booth.is_available}
+                              onCheckedChange={(checked) =>
+                                handleToggleAvailability(booth.id, checked)
+                              }
+                            />
+                            <span className={`text-sm ${booth.is_available ? 'text-green-600' : 'text-red-600'}`}>
+                              {booth.is_available ? 'Available' : 'Unavailable'}
+                            </span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditDialog(booth)}
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
+                          {showArchived ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRestoreBooth(booth.id)}
+                              disabled={restoreBooth.isPending}
+                              title="Restore booth"
+                            >
+                              <ArchiveRestore className="h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEditDialog(booth)}
+                                title="Edit booth"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleArchiveBooth(booth.id)}
+                                disabled={archiveBooth.isPending}
+                                title="Archive booth"
+                                className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                              >
+                                <Archive className="h-3 w-3" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
