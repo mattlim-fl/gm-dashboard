@@ -287,6 +287,7 @@ serve(async (req: Request) => {
 
     // Pricing and Square catalog item variation IDs
     const TICKET_PRICE_CENTS = 1000 // $10 per ticket
+    const ticketsCents = ticketQty * TICKET_PRICE_CENTS
     const KARAOKE_BOOKING_VARIATION_ID = 'JZH2F6T6ZMSA5USWIC6AX7V4'
     const HIPPIE_BOOKING_VARIATION_ID = 'FI67PB3JEZZ5C2WQP2QNBEGM'
 
