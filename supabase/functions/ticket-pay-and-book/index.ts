@@ -1,7 +1,7 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
-import { chargeSquare, refundSquarePayment, toIdempotencyKey } from "../_shared/square.ts"
+import { chargeSquare, refundSquarePayment, toIdempotencyKey, createSquareOrder } from "../_shared/square.ts"
 
 // Minimal declaration for Deno global used for env access in Edge Functions
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,17 +352,32 @@ serve(async (req: Request) => {
     const TICKET_PRICE_CENTS = 1000 // $10 per ticket
     const totalCents = input.ticketQuantity * TICKET_PRICE_CENTS
 
-    // Generate idempotency key
-    const rawIdKey = `ticket:${input.customerEmail || input.customerPhone}:${effectiveBookingDate}:${input.ticketQuantity}:${Date.now()}`
-    const idempotencyKey = await toIdempotencyKey(rawIdKey)
+    // Generate idempotency keys
+    const timestamp = Date.now()
+    const rawIdKey = `ticket:${input.customerEmail || input.customerPhone}:${effectiveBookingDate}:${input.ticketQuantity}:${timestamp}`
+    const orderIdempotencyKey = await toIdempotencyKey(`order:${rawIdKey}`)
+    const paymentIdempotencyKey = await toIdempotencyKey(`payment:${rawIdKey}`)
 
-    // Charge with Square
+    // Create Square order first (for attendance tracking)
+    const { orderId } = await createSquareOrder({
+      locationId: SQUARE_LOCATION_ID,
+      accessToken: SQUARE_ACCESS_TOKEN,
+      idempotencyKey: orderIdempotencyKey,
+      lineItems: [{
+        name: `Priority Entry Ticket - ${effectiveBookingDate}`,
+        quantity: input.ticketQuantity,
+        amountCents: TICKET_PRICE_CENTS
+      }]
+    })
+
+    // Charge with Square (linked to order)
     const { paymentId } = await chargeSquare({
       amountCents: totalCents,
       token: input.paymentToken,
-      idempotencyKey,
+      idempotencyKey: paymentIdempotencyKey,
       locationId: SQUARE_LOCATION_ID,
-      accessToken: SQUARE_ACCESS_TOKEN
+      accessToken: SQUARE_ACCESS_TOKEN,
+      orderId
     })
 
     // Wrap booking creation in try-catch to trigger refund on failure

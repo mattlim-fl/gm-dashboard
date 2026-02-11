@@ -32,6 +32,7 @@ export interface ChargeParams {
   idempotencyKey: string
   locationId: string
   accessToken: string
+  orderId?: string // Optional: link payment to a Square order
 }
 
 export interface ChargeResult {
@@ -74,9 +75,21 @@ export async function toIdempotencyKey(value: string): Promise<string> {
  * Includes automatic retry with exponential backoff for transient failures
  */
 export async function chargeSquare(params: ChargeParams): Promise<ChargeResult> {
-  const { amountCents, token, idempotencyKey, locationId, accessToken } = params
+  const { amountCents, token, idempotencyKey, locationId, accessToken, orderId } = params
 
   return withRetry(async () => {
+    const paymentBody: Record<string, unknown> = {
+      idempotency_key: idempotencyKey,
+      source_id: token,
+      location_id: locationId,
+      amount_money: { amount: amountCents, currency: 'AUD' }
+    }
+
+    // Link payment to order if provided
+    if (orderId) {
+      paymentBody.order_id = orderId
+    }
+
     const res = await fetch(`${SQUARE_API_BASE}/v2/payments`, {
       method: 'POST',
       headers: {
@@ -84,12 +97,7 @@ export async function chargeSquare(params: ChargeParams): Promise<ChargeResult> 
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        idempotency_key: idempotencyKey,
-        source_id: token,
-        location_id: locationId,
-        amount_money: { amount: amountCents, currency: 'AUD' }
-      })
+      body: JSON.stringify(paymentBody)
     })
 
     const rawBody = await res.json()

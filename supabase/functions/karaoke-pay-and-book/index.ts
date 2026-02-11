@@ -1,7 +1,7 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
-import { chargeSquare, refundSquarePayment, toIdempotencyKey } from "../_shared/square.ts"
+import { chargeSquare, refundSquarePayment, toIdempotencyKey, createSquareOrder } from "../_shared/square.ts"
 
 // Minimal declaration for Deno global used for env access in Edge Functions
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -288,12 +288,44 @@ serve(async (req: Request) => {
     const ticketsCents = ticketQty * TICKET_PRICE_CENTS
     const totalCents = boothCents + ticketsCents
 
-    // Idempotency key based on hold + booth + date/time (hashed to <=45 chars)
+    // Generate idempotency keys
     const rawIdKey = `${input.holdId}:${input.boothId}:${input.bookingDate}:${input.startTime}-${input.endTime}:t${ticketQty}`
-    const idempotencyKey = await toIdempotencyKey(rawIdKey)
+    const orderIdempotencyKey = await toIdempotencyKey(`order:${rawIdKey}`)
+    const paymentIdempotencyKey = await toIdempotencyKey(`payment:${rawIdKey}`)
 
-    // Charge with Square directly (no order creation)
-    const { paymentId } = await chargeSquare({ amountCents: totalCents, token: input.paymentToken, idempotencyKey, locationId: SQUARE_LOCATION_ID, accessToken: SQUARE_ACCESS_TOKEN })
+    // Build line items for Square order
+    const lineItems: Array<{ name: string; quantity: number; amountCents: number }> = [
+      {
+        name: `Karaoke Booth - ${input.bookingDate} ${input.startTime}-${input.endTime}`,
+        quantity: 1,
+        amountCents: boothCents
+      }
+    ]
+    if (ticketQty > 0) {
+      lineItems.push({
+        name: `Priority Entry Ticket - ${input.bookingDate}`,
+        quantity: ticketQty,
+        amountCents: TICKET_PRICE_CENTS
+      })
+    }
+
+    // Create Square order first (for attendance tracking)
+    const { orderId } = await createSquareOrder({
+      locationId: SQUARE_LOCATION_ID,
+      accessToken: SQUARE_ACCESS_TOKEN,
+      idempotencyKey: orderIdempotencyKey,
+      lineItems
+    })
+
+    // Charge with Square (linked to order)
+    const { paymentId } = await chargeSquare({
+      amountCents: totalCents,
+      token: input.paymentToken,
+      idempotencyKey: paymentIdempotencyKey,
+      locationId: SQUARE_LOCATION_ID,
+      accessToken: SQUARE_ACCESS_TOKEN,
+      orderId
+    })
 
     // Wrap booking creation in try-catch to trigger refund on failure
     let booking: { bookingId: string; referenceCode: string }
