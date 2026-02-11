@@ -178,9 +178,9 @@ export interface CreateOrderParams {
   accessToken: string
   idempotencyKey: string
   lineItems: Array<{
-    name: string
+    catalogObjectId: string // Square catalog item variation ID
     quantity: number
-    amountCents: number
+    basePriceCents?: number // Optional: override catalog price (for variable-priced items like karaoke)
   }>
 }
 
@@ -196,11 +196,17 @@ export interface CreateOrderResult {
 export async function createSquareOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
   const { locationId, accessToken, idempotencyKey, lineItems } = params
 
-  const squareLineItems = lineItems.map(item => ({
-    name: item.name,
-    quantity: String(item.quantity),
-    base_price_money: { amount: item.amountCents, currency: 'AUD' }
-  }))
+  const squareLineItems = lineItems.map(item => {
+    const lineItem: Record<string, unknown> = {
+      catalog_object_id: item.catalogObjectId,
+      quantity: String(item.quantity)
+    }
+    // Override catalog price if specified (for variable-priced items like karaoke)
+    if (item.basePriceCents !== undefined) {
+      lineItem.base_price_money = { amount: item.basePriceCents, currency: 'AUD' }
+    }
+    return lineItem
+  })
 
   return withRetry(async () => {
     const res = await fetch(`${SQUARE_API_BASE}/v2/orders`, {

@@ -348,31 +348,31 @@ serve(async (req: Request) => {
       console.log(`Organiser purchase with share token ${shareToken}`)
     }
 
-    // Calculate pricing
-    const TICKET_PRICE_CENTS = 1000 // $10 per ticket
-    const totalCents = input.ticketQuantity * TICKET_PRICE_CENTS
-
     // Generate idempotency keys
     const timestamp = Date.now()
     const rawIdKey = `ticket:${input.customerEmail || input.customerPhone}:${effectiveBookingDate}:${input.ticketQuantity}:${timestamp}`
     const orderIdempotencyKey = await toIdempotencyKey(`order:${rawIdKey}`)
     const paymentIdempotencyKey = await toIdempotencyKey(`payment:${rawIdKey}`)
 
+    // Pricing and Square catalog item IDs
+    const TICKET_PRICE_CENTS = 1000 // $10 per ticket
+    const HIPPIE_BOOKING_ITEM_ID = 'RHH2DXIBSZACT4D4LSTN7DRG'
+
     // Create Square order first (for attendance tracking)
-    const { orderId } = await createSquareOrder({
+    const { orderId, totalCents: orderTotalCents } = await createSquareOrder({
       locationId: SQUARE_LOCATION_ID,
       accessToken: SQUARE_ACCESS_TOKEN,
       idempotencyKey: orderIdempotencyKey,
       lineItems: [{
-        name: `Priority Entry Ticket - ${effectiveBookingDate}`,
+        catalogObjectId: HIPPIE_BOOKING_ITEM_ID,
         quantity: input.ticketQuantity,
-        amountCents: TICKET_PRICE_CENTS
+        basePriceCents: TICKET_PRICE_CENTS // Pass our price for variable-price item
       }]
     })
 
-    // Charge with Square (linked to order)
+    // Charge with Square (linked to order) - use order total from catalog
     const { paymentId } = await chargeSquare({
-      amountCents: totalCents,
+      amountCents: orderTotalCents,
       token: input.paymentToken,
       idempotencyKey: paymentIdempotencyKey,
       locationId: SQUARE_LOCATION_ID,
@@ -390,6 +390,7 @@ serve(async (req: Request) => {
       const guestListToken = await generateGuestListToken(tempId, effectiveBookingDate)
 
       // Create ticket booking row
+      const ticketPriceCents = Math.round(orderTotalCents / input.ticketQuantity)
       booking = await createTicketBooking({
         customerName: input.customerName,
         customerEmail: input.customerEmail,
@@ -398,8 +399,8 @@ serve(async (req: Request) => {
         bookingDate: effectiveBookingDate,
         ticketQuantity: input.ticketQuantity,
         ticketType: input.ticketType,
-        ticketPriceCents: TICKET_PRICE_CENTS,
-        totalAmount: totalCents / 100,
+        ticketPriceCents,
+        totalAmount: orderTotalCents / 100,
         squarePaymentId: paymentId,
         guestListToken,
         shareToken,
@@ -430,7 +431,7 @@ serve(async (req: Request) => {
       try {
         await refundSquarePayment({
           paymentId,
-          amountCents: totalCents,
+          amountCents: orderTotalCents,
           accessToken: SQUARE_ACCESS_TOKEN,
           reason: 'Ticket booking creation failed - automatic refund'
         })

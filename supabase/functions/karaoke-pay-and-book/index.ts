@@ -284,42 +284,44 @@ serve(async (req: Request) => {
 
     const boothCents = Math.round(Number(hourlyRate) * durationHours * 100)
     const ticketQty = Math.max(0, Number(input.ticketQuantity || input.guestCount || 0))
+
+    // Pricing and Square catalog item IDs
     const TICKET_PRICE_CENTS = 1000 // $10 per ticket
-    const ticketsCents = ticketQty * TICKET_PRICE_CENTS
-    const totalCents = boothCents + ticketsCents
+    const KARAOKE_BOOKING_ITEM_ID = 'CNXA4S6ONOYV6YERIYQVQSBQ'
+    const HIPPIE_BOOKING_ITEM_ID = 'RHH2DXIBSZACT4D4LSTN7DRG'
 
     // Generate idempotency keys
     const rawIdKey = `${input.holdId}:${input.boothId}:${input.bookingDate}:${input.startTime}-${input.endTime}:t${ticketQty}`
     const orderIdempotencyKey = await toIdempotencyKey(`order:${rawIdKey}`)
     const paymentIdempotencyKey = await toIdempotencyKey(`payment:${rawIdKey}`)
 
-    // Build line items for Square order
-    const lineItems: Array<{ name: string; quantity: number; amountCents: number }> = [
+    // Build line items for Square order using catalog items
+    const lineItems: Array<{ catalogObjectId: string; quantity: number; basePriceCents?: number }> = [
       {
-        name: `Karaoke Booth - ${input.bookingDate} ${input.startTime}-${input.endTime}`,
+        catalogObjectId: KARAOKE_BOOKING_ITEM_ID,
         quantity: 1,
-        amountCents: boothCents
+        basePriceCents: boothCents // Variable price based on hourly rate × duration
       }
     ]
     if (ticketQty > 0) {
       lineItems.push({
-        name: `Priority Entry Ticket - ${input.bookingDate}`,
+        catalogObjectId: HIPPIE_BOOKING_ITEM_ID,
         quantity: ticketQty,
-        amountCents: TICKET_PRICE_CENTS
+        basePriceCents: TICKET_PRICE_CENTS // Variable price item
       })
     }
 
     // Create Square order first (for attendance tracking)
-    const { orderId } = await createSquareOrder({
+    const { orderId, totalCents: orderTotalCents } = await createSquareOrder({
       locationId: SQUARE_LOCATION_ID,
       accessToken: SQUARE_ACCESS_TOKEN,
       idempotencyKey: orderIdempotencyKey,
       lineItems
     })
 
-    // Charge with Square (linked to order)
+    // Charge with Square (linked to order) - use order total from catalog
     const { paymentId } = await chargeSquare({
-      amountCents: totalCents,
+      amountCents: orderTotalCents,
       token: input.paymentToken,
       idempotencyKey: paymentIdempotencyKey,
       locationId: SQUARE_LOCATION_ID,
@@ -366,7 +368,7 @@ serve(async (req: Request) => {
       try {
         await refundSquarePayment({
           paymentId,
-          amountCents: totalCents,
+          amountCents: orderTotalCents,
           accessToken: SQUARE_ACCESS_TOKEN,
           reason: 'Booking creation failed - automatic refund'
         })
