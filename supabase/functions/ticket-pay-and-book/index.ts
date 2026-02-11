@@ -354,9 +354,9 @@ serve(async (req: Request) => {
     const orderIdempotencyKey = await toIdempotencyKey(`order:${rawIdKey}`)
     const paymentIdempotencyKey = await toIdempotencyKey(`payment:${rawIdKey}`)
 
-    // Pricing and Square catalog item IDs
+    // Pricing and Square catalog item variation IDs
     const TICKET_PRICE_CENTS = 1000 // $10 per ticket
-    const HIPPIE_BOOKING_ITEM_ID = 'RHH2DXIBSZACT4D4LSTN7DRG'
+    const HIPPIE_BOOKING_VARIATION_ID = 'FI67PB3JEZZ5C2WQP2QNBEGM'
 
     // Create Square order first (for attendance tracking)
     const { orderId, totalCents: orderTotalCents } = await createSquareOrder({
@@ -364,7 +364,7 @@ serve(async (req: Request) => {
       accessToken: SQUARE_ACCESS_TOKEN,
       idempotencyKey: orderIdempotencyKey,
       lineItems: [{
-        catalogObjectId: HIPPIE_BOOKING_ITEM_ID,
+        catalogObjectId: HIPPIE_BOOKING_VARIATION_ID,
         quantity: input.ticketQuantity,
         basePriceCents: TICKET_PRICE_CENTS // Pass our price for variable-price item
       }]

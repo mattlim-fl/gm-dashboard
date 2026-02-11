@@ -285,10 +285,10 @@ serve(async (req: Request) => {
     const boothCents = Math.round(Number(hourlyRate) * durationHours * 100)
     const ticketQty = Math.max(0, Number(input.ticketQuantity || input.guestCount || 0))
 
-    // Pricing and Square catalog item IDs
+    // Pricing and Square catalog item variation IDs
     const TICKET_PRICE_CENTS = 1000 // $10 per ticket
-    const KARAOKE_BOOKING_ITEM_ID = 'CNXA4S6ONOYV6YERIYQVQSBQ'
-    const HIPPIE_BOOKING_ITEM_ID = 'RHH2DXIBSZACT4D4LSTN7DRG'
+    const KARAOKE_BOOKING_VARIATION_ID = 'JZH2F6T6ZMSA5USWIC6AX7V4'
+    const HIPPIE_BOOKING_VARIATION_ID = 'FI67PB3JEZZ5C2WQP2QNBEGM'
 
     // Generate idempotency keys
     const rawIdKey = `${input.holdId}:${input.boothId}:${input.bookingDate}:${input.startTime}-${input.endTime}:t${ticketQty}`
@@ -298,14 +298,14 @@ serve(async (req: Request) => {
     // Build line items for Square order using catalog items
     const lineItems: Array<{ catalogObjectId: string; quantity: number; basePriceCents?: number }> = [
       {
-        catalogObjectId: KARAOKE_BOOKING_ITEM_ID,
+        catalogObjectId: KARAOKE_BOOKING_VARIATION_ID,
         quantity: 1,
         basePriceCents: boothCents // Variable price based on hourly rate × duration
       }
     ]
     if (ticketQty > 0) {
       lineItems.push({
-        catalogObjectId: HIPPIE_BOOKING_ITEM_ID,
+        catalogObjectId: HIPPIE_BOOKING_VARIATION_ID,
         quantity: ticketQty,
         basePriceCents: TICKET_PRICE_CENTS // Variable price item
       })
