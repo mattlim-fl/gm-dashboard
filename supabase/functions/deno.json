@@ -3,7 +3,9 @@
     "test": "deno test --allow-env --allow-net _shared/__tests__/",
     "test:crypto": "deno test --allow-env _shared/__tests__/crypto.test.ts",
     "test:retry": "deno test --allow-env _shared/__tests__/retry.test.ts",
-    "test:square": "deno test --allow-env --allow-net _shared/__tests__/square.test.ts"
+    "test:square": "deno test --allow-env --allow-net _shared/__tests__/square.test.ts",
+    "test:claude": "deno test --allow-env --allow-net _shared/__tests__/claude.test.ts",
+    "test:gmail": "deno test --allow-env --allow-net _shared/__tests__/gmail.test.ts"
   },
   "imports": {
     "@std/": "https://deno.land/std@0.168.0/"

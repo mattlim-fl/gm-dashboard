@@ -6,8 +6,9 @@ import { SystemSettings } from '@/components/settings/SystemSettings';
 import { ApiSettings } from '@/components/settings/ApiSettings';
 import { BenchmarkSettings } from '@/components/settings/BenchmarkSettings';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
+import { EmailAgentSettings } from '@/components/settings/EmailAgentSettings';
 
-const VALID_TABS = ['integrations', 'notifications', 'benchmarks', 'system'] as const;
+const VALID_TABS = ['integrations', 'notifications', 'email-agent', 'benchmarks', 'system'] as const;
 type TabValue = typeof VALID_TABS[number];
 
 export default function Settings() {
@@ -47,11 +48,12 @@ export default function Settings() {
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="integrations">API Integrations</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="email-agent">Email Agent</TabsTrigger>
             <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
-            <TabsTrigger value="system">System Settings</TabsTrigger>
+            <TabsTrigger value="system">System</TabsTrigger>
           </TabsList>
 
           <TabsContent value="integrations" className="mt-6">
@@ -60,6 +62,10 @@ export default function Settings() {
 
           <TabsContent value="notifications" className="mt-6">
             <NotificationSettings />
+          </TabsContent>
+
+          <TabsContent value="email-agent" className="mt-6">
+            <EmailAgentSettings />
           </TabsContent>
 
           <TabsContent value="benchmarks" className="mt-6">

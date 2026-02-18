@@ -50,6 +50,8 @@ Edge functions share common utilities to avoid code duplication:
 | `errors.ts` | Standardized error classes (`PaymentError`, `BookingError`, etc.) |
 | `schemas.ts` | Zod schemas for runtime API response validation |
 | `saturday-utils.ts` | Saturday numbering for YoY comparisons (see below) |
+| `claude.ts` | Claude API client for email classification and draft generation |
+| `gmail.ts` | Gmail API client (OAuth, fetch, draft, labels) |
 
 ### Usage in Edge Functions
 ```typescript
@@ -90,6 +92,8 @@ deno task test
 deno task test:crypto   # Encryption, hashing, secure codes
 deno task test:retry    # Retry logic, backoff timing
 deno task test:square   # Idempotency keys, Square utilities
+deno task test:claude   # Claude API client tests
+deno task test:gmail    # Gmail API client tests
 ```
 
 ### Test Coverage
@@ -98,6 +102,8 @@ Tests are in `supabase/functions/_shared/__tests__/`:
 - **retry.test.ts** (16 tests) - Retry behavior, exponential backoff, max retries
 - **square.test.ts** (10 tests) - Idempotency keys, utility functions
 - **saturday-utils.test.ts** (29 tests) - Saturday numbering, YoY mapping, edge cases
+- **claude.test.ts** - Claude API client, classification parsing
+- **gmail.test.ts** - Gmail API client, message parsing, draft creation
 
 ### Writing New Tests
 ```typescript
@@ -118,6 +124,9 @@ Deno.test("description of test", async () => {
 | `ticket-pay-and-book` | Process ticket purchases |
 | `trade-report` | Weekly trade report notifications |
 | `business-performance` | Weekly P&L notifications |
+| `email-agent-scheduler` | Cron-triggered poller for email agent |
+| `email-agent-process` | Main email processing orchestrator |
+| `email-agent-oauth` | Gmail OAuth callback handler |
 
 ## Testing Email Templates
 
