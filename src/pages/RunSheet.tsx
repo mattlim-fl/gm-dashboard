@@ -18,7 +18,7 @@ import { BookingDetailsSidebar } from "@/components/bookings/BookingDetailsSideb
 import { Member } from "@/services/memberService";
 import { useMembersWithCheckins, useToggleMemberCheckin } from "@/hooks/useMembers";
 import { AddMemberDialog } from "@/components/members/AddMemberDialog";
-import { MemberDetailDialog } from "@/components/members/MemberDetailDialog";
+import { MemberProfilePanel } from "@/components/members/MemberProfilePanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import GuestListGroupedRunSheet from "@/components/occasions/GuestListGroupedRunSheet";
@@ -427,13 +427,14 @@ export default function RunSheet() {
                   const max = booking.ticket_quantity || 0;
                   const checkins = attendance.vip[booking.id] || [];
                   
-                  // Extract guest names, IDs, and organiser flags from booking_guests relationship
+                  // Extract guest names, IDs, organiser flags, and notes from booking_guests relationship
                   const bookingGuests = (booking as any).booking_guests || [];
-                  const guestData = Array.isArray(bookingGuests) 
+                  const guestData = Array.isArray(bookingGuests)
                     ? bookingGuests.map((g: any) => ({
                         id: g?.id || null,
                         name: g?.guest_name || '',
-                        isOrganiser: g?.is_organiser === true
+                        isOrganiser: g?.is_organiser === true,
+                        notes: g?.notes || ''
                       }))
                     : [];
 
@@ -451,7 +452,7 @@ export default function RunSheet() {
                     // Skip individual checked guests if showCheckedOff is false
                     if (!showCheckedOff && isChecked) continue;
                     
-                    const guestInfo = guestData[idx] || { id: null, name: '', isOrganiser: false };
+                    const guestInfo = guestData[idx] || { id: null, name: '', isOrganiser: false, notes: '' };
                     const guestName = guestInfo.name || `Ticket #${idx + 1}`;
 
                     flatGuests.push({
@@ -465,6 +466,7 @@ export default function RunSheet() {
                       isOrganiser: guestInfo.isOrganiser,
                       organiserName,
                       booking,
+                      notes: guestInfo.notes,
                     });
                   }
                 });
@@ -569,7 +571,7 @@ export default function RunSheet() {
           }}
         />
 
-        <MemberDetailDialog
+        <MemberProfilePanel
           member={selectedMember}
           isOpen={isMemberProfileOpen}
           onClose={() => {

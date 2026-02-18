@@ -11,7 +11,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Home, Calendar, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, Users2, Image } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { LastSyncIndicator } from "./LastSyncIndicator";
 import { ThemeToggle } from "./ThemeToggle";
@@ -96,6 +96,7 @@ const settingsItems: MenuItem[] = [
 
 export function AppSidebar() {
   const { role } = useAuth();
+  const location = useLocation();
   const [lastSyncTime, setLastSyncTime] = useState<string | undefined>();
 
   const fetchLastSyncTime = async () => {
@@ -122,11 +123,16 @@ export function AppSidebar() {
 
 
 
+  const isActiveRoute = (url: string) => {
+    // Exact match or starts with the URL (for nested routes)
+    return location.pathname === url || location.pathname.startsWith(url + '/');
+  };
+
   const renderMenuItems = (items: MenuItem[]) => (
     <SidebarMenu>
       {items.map((item) => (
         <SidebarMenuItem key={item.title}>
-          <SidebarMenuButton asChild tooltip={item.title}>
+          <SidebarMenuButton asChild tooltip={item.title} isActive={isActiveRoute(item.url)}>
             <Link to={item.url}>
               <item.icon className="h-4 w-4" />
               <span>{item.title}</span>
@@ -146,7 +152,7 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={dashboardItem.title}>
+                  <SidebarMenuButton asChild tooltip={dashboardItem.title} isActive={isActiveRoute(dashboardItem.url)}>
                     <Link to={dashboardItem.url}>
                       <dashboardItem.icon className="h-4 w-4" />
                       <span>{dashboardItem.title}</span>

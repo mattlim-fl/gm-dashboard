@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -18,18 +20,17 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Star, Edit2, Save, X, Calendar, Phone, User, Clock, StickyNote } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
 import { Member, MemberStatus } from "@/services/memberService";
-import { useUpdateMember, useRecordFirstVisit } from "@/hooks/useMembers";
+import { useUpdateMember } from "@/hooks/useMembers";
 import { format } from "date-fns";
 
-interface MemberDetailDialogProps {
+interface MemberProfilePanelProps {
   member: Member | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDialogProps) {
+export function MemberProfilePanel({ member, isOpen, onClose }: MemberProfilePanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -39,7 +40,6 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
   });
 
   const updateMember = useUpdateMember();
-  const recordFirstVisit = useRecordFirstVisit();
 
   useEffect(() => {
     if (member) {
@@ -99,58 +99,35 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
     }
   };
 
-  const handleRecordFirstVisit = async () => {
-    if (!member) return;
-
-    try {
-      await recordFirstVisit.mutateAsync(member.id);
-    } catch {
-      // Error handled by mutation
-    }
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-            Member Details
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Venue Badge */}
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
           <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+              <SheetTitle>Member Details</SheetTitle>
+            </div>
+            {!isEditing && (
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
+          </div>
+          <SheetDescription>
+            {getVenueLabel(member.venue)} member since {formatDate(member.membership_start)}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-4 mt-6">
+          {/* Venue and Status Badges */}
+          <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-sm">
               {getVenueLabel(member.venue)}
             </Badge>
             {getStatusBadge(member.status)}
           </div>
-
-          {/* First Visit Alert */}
-          {!member.first_visit_date && member.status === "active" && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-amber-800">First Visit Pending</p>
-                    <p className="text-sm text-amber-700">
-                      Entitled to $60 welcome drinks
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="border-amber-300 text-amber-800 hover:bg-amber-100"
-                    onClick={handleRecordFirstVisit}
-                    disabled={recordFirstVisit.isPending}
-                  >
-                    {recordFirstVisit.isPending ? "Recording..." : "Record Visit"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Member Info */}
           {isEditing ? (
@@ -228,39 +205,29 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
             <>
               <Card>
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">Details</CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsEditing(true)}
-                    >
-                      <Edit2 className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                  </div>
+                  <CardTitle className="text-sm">Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <User className="h-4 w-4 text-gm-neutral-500" />
+                    <User className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-xs text-gm-neutral-500">Name</p>
+                      <p className="text-xs text-muted-foreground">Name</p>
                       <p className="font-medium">{member.name}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <Phone className="h-4 w-4 text-gm-neutral-500" />
+                    <Phone className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-xs text-gm-neutral-500">Phone</p>
+                      <p className="text-xs text-muted-foreground">Phone</p>
                       <p className="font-medium">{member.phone}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <Calendar className="h-4 w-4 text-gm-neutral-500" />
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-xs text-gm-neutral-500">Date of Birth</p>
+                      <p className="text-xs text-muted-foreground">Date of Birth</p>
                       <p className="font-medium">{formatDate(member.date_of_birth)}</p>
                     </div>
                   </div>
@@ -273,17 +240,17 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <Clock className="h-4 w-4 text-gm-neutral-500" />
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-xs text-gm-neutral-500">Joined</p>
+                      <p className="text-xs text-muted-foreground">Joined</p>
                       <p className="font-medium">{formatDate(member.membership_start)}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <Clock className="h-4 w-4 text-gm-neutral-500" />
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-xs text-gm-neutral-500">Expires</p>
+                      <p className="text-xs text-muted-foreground">Expires</p>
                       <p className="font-medium">{formatDate(member.membership_expiry)}</p>
                     </div>
                   </div>
@@ -292,7 +259,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
                     <div className="flex items-center gap-3">
                       <Star className="h-4 w-4 text-amber-500" />
                       <div>
-                        <p className="text-xs text-gm-neutral-500">First Visit</p>
+                        <p className="text-xs text-muted-foreground">First Visit</p>
                         <p className="font-medium">{formatDate(member.first_visit_date)}</p>
                       </div>
                     </div>
@@ -309,7 +276,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-gm-neutral-600 whitespace-pre-wrap">
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                       {member.notes}
                     </p>
                   </CardContent>
@@ -318,7 +285,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
             </>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

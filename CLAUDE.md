@@ -135,6 +135,44 @@ Go to **Settings → Notifications tab** to test email templates:
 - Enter test email address
 - Click "Send Test Email" or "Preview"
 
+## UI Patterns
+
+### Detail Views: Sidepanels over Modals
+
+When displaying detail views for records (customers, members, bookings, etc.), **prefer right sidepanels (Sheet) over centered modals (Dialog)**.
+
+**Why sidepanels:**
+- Users can still see the list/table context behind the panel
+- Better for workflows where users navigate between multiple records
+- More natural for editing forms with multiple fields
+- Consistent with the app's established patterns
+
+**When to use modals:**
+- Quick confirmations ("Are you sure?")
+- Simple single-action dialogs (e.g., "Add X guests")
+- Alerts and notifications
+
+**Implementation:**
+```tsx
+// Use Sheet from @/components/ui/sheet
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
+<Sheet open={isOpen} onOpenChange={onClose}>
+  <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+    <SheetHeader>
+      <SheetTitle>Record Details</SheetTitle>
+    </SheetHeader>
+    {/* Content */}
+  </SheetContent>
+</Sheet>
+```
+
+**Existing examples:**
+- `CustomerProfilePanel` - Customer details and editing
+- `MemberProfilePanel` - Member details and editing
+- `BookingDetailsSidebar` - Booking details and editing
+- `OccasionDetailPanel` - Occasion/event details
+
 ## Common Tasks
 
 ### Check database tables

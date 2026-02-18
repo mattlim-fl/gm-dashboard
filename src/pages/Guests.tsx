@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Users, UserPlus, Search, UserCheck, Clock, X, Star } from "lucide-react";
+import { Plus, Users, UserPlus, Search, UserCheck, Clock, X, Star, StickyNote } from "lucide-react";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useBookings } from "@/hooks/useBookings";
 import { useMembers } from "@/hooks/useMembers";
@@ -31,7 +31,7 @@ import { CustomerFilters, CustomerFilterProps } from "@/components/customers/Cus
 import { CustomersTable } from "@/components/customers/CustomersTable";
 import { CustomerPagination } from "@/components/customers/CustomerPagination";
 import { CustomerProfilePanel } from "@/components/customers/CustomerProfilePanel";
-import { MemberDetailDialog } from "@/components/members/MemberDetailDialog";
+import { MemberProfilePanel } from "@/components/members/MemberProfilePanel";
 import { AddMemberDialog } from "@/components/members/AddMemberDialog";
 import { format } from "date-fns";
 
@@ -494,18 +494,19 @@ export default function Guests() {
                     <TableHead>Joined</TableHead>
                     <TableHead>Expires</TableHead>
                     <TableHead>First Visit</TableHead>
+                    <TableHead>Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loadingMembers ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={9} className="text-center py-8">
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : members.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-gm-neutral-500">
+                      <TableCell colSpan={9} className="text-center py-8 text-gm-neutral-500">
                         No members found
                       </TableCell>
                     </TableRow>
@@ -539,6 +540,18 @@ export default function Guests() {
                             <span className="text-gm-neutral-400">-</span>
                           )}
                         </TableCell>
+                        <TableCell>
+                          {member.notes ? (
+                            <div className="flex items-center gap-1.5 max-w-[200px]">
+                              <StickyNote className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                              <span className="text-sm text-gm-neutral-600 dark:text-gm-neutral-400 truncate" title={member.notes}>
+                                {member.notes}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gm-neutral-400">-</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -546,8 +559,8 @@ export default function Guests() {
               </Table>
             </div>
 
-            {/* Member Detail Dialog */}
-            <MemberDetailDialog
+            {/* Member Profile Panel */}
+            <MemberProfilePanel
               member={selectedMember}
               isOpen={isDetailOpen}
               onClose={() => {

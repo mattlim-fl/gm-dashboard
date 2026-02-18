@@ -84,7 +84,6 @@ export const useRecordFirstVisit = () => {
       queryClient.invalidateQueries({ queryKey: ['members'] });
       toast({
         title: "First Visit Recorded",
-        description: "Don't forget their welcome drinks!",
       });
     },
     onError: (error: Error) => {

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, ChevronUp, Search, Pencil, Check, X, Star, UserPlus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, Pencil, Check, X, Star, UserPlus, StickyNote } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MemberWithCheckin } from '@/hooks/useMembers';
 import { Member } from '@/services/memberService';
@@ -19,6 +19,7 @@ export interface RunSheetGuestItem {
   organiserName: string | null;
   venue?: string;
   booking: any;
+  notes?: string;
 }
 
 interface GuestListGroupedRunSheetProps {
@@ -185,6 +186,18 @@ export default function GuestListGroupedRunSheet({
         <td className="py-3 px-4">
           <span className="text-sm text-muted-foreground capitalize">{venue}</span>
         </td>
+        <td className="py-3 px-4">
+          {guest.notes ? (
+            <div className="flex items-center gap-1.5 max-w-[150px]">
+              <StickyNote className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+              <span className="text-sm text-muted-foreground truncate" title={guest.notes}>
+                {guest.notes}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </td>
         <td className="py-3 px-4 text-right">
           <Checkbox
             checked={guest.isChecked}
@@ -222,6 +235,18 @@ export default function GuestListGroupedRunSheet({
         </td>
         <td className="py-3 px-4">
           <span className="text-sm text-muted-foreground capitalize">{member.venue}</span>
+        </td>
+        <td className="py-3 px-4">
+          {member.notes ? (
+            <div className="flex items-center gap-1.5 max-w-[150px]">
+              <StickyNote className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+              <span className="text-sm text-muted-foreground truncate" title={member.notes}>
+                {member.notes}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
         </td>
         <td className="py-3 px-4 text-right">
           <Checkbox
@@ -321,6 +346,7 @@ export default function GuestListGroupedRunSheet({
                   <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Reference</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Organiser</th>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Venue</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground">Notes</th>
                   <th className="text-right py-3 px-4 text-xs font-semibold text-muted-foreground">Check-in</th>
                 </tr>
               </thead>
