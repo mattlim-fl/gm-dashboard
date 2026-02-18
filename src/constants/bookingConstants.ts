@@ -6,6 +6,7 @@
 export const VENUE_OPTIONS = [
   { value: "manor", label: "Manor" },
   { value: "hippie", label: "Hippie Club" },
+  { value: "daisy", label: "Daisy" },
 ] as const;
 
 export const BOOKING_TYPE_OPTIONS = [

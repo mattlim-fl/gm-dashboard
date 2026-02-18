@@ -45,6 +45,7 @@ Edge functions share common utilities to avoid code duplication:
 | Module | Purpose |
 |--------|---------|
 | `crypto.ts` | HMAC-SHA256, AES-256-GCM encryption, secure random code generation |
+| `credentials.ts` | Per-venue/org/global API credential management with encryption |
 | `square.ts` | Square API helpers (payments, refunds, orders) with retry logic |
 | `retry.ts` | Exponential backoff with jitter for transient failures |
 | `errors.ts` | Standardized error classes (`PaymentError`, `BookingError`, etc.) |
@@ -60,7 +61,36 @@ import { generateSecureCode, encryptToken } from "../_shared/crypto.ts"
 import { withRetry } from "../_shared/retry.ts"
 import { PaymentError, errorResponse } from "../_shared/errors.ts"
 import { getSameSaturdayLastYear, findSaturdayInRange } from "../_shared/saturday-utils.ts"
+import { getSquareCredentials, getResendCredentials } from "../_shared/credentials.ts"
 ```
+
+### API Credentials (`credentials.ts`)
+
+API credentials are stored encrypted in `venue_api_credentials` with flexible scoping:
+
+| Scope | Integration | Description |
+|-------|-------------|-------------|
+| **Per-venue** | Square, Gmail | Each venue has its own credentials |
+| **Per-organization** | Xero | Grouped venues share one (e.g., Manor+Hippie share Fractal's Xero) |
+| **Global** | Resend | Single account for all venues |
+
+**Organization mapping:**
+- `fractal` → manor, hippie
+- `daisies` → daisy
+
+**Key functions:**
+```typescript
+// Get credentials with env var fallback
+const squareCreds = await getSquareCredentials(supabase, venue)
+const resendCreds = await getResendCredentials(supabase)
+const xeroCreds = await getXeroCredentials(supabase, venue)  // resolves to org-level
+const gmailCreds = await getGmailCredentials(supabase, venue)
+
+// Save credentials (encrypts automatically)
+await saveCredentials(supabase, venue, 'square', { access_token, location_id })
+```
+
+**Fallback behavior:** If DB lookup fails, functions fall back to environment variables (`SQUARE_ACCESS_TOKEN`, `RESEND_API_KEY`, etc.) for backwards compatibility.
 
 ### Saturday Numbering (YoY Comparisons)
 
@@ -127,6 +157,9 @@ Deno.test("description of test", async () => {
 | `email-agent-scheduler` | Cron-triggered poller for email agent |
 | `email-agent-process` | Main email processing orchestrator |
 | `email-agent-oauth` | Gmail OAuth callback handler |
+| `save-credentials` | Save encrypted API credentials to database |
+| `test-credentials` | Test API credential connectivity |
+| `xero-oauth` | Xero OAuth callback handler |
 
 ## Testing Email Templates
 
@@ -134,6 +167,32 @@ Go to **Settings → Notifications tab** to test email templates:
 - Select venue (Manor / Hippie Club)
 - Enter test email address
 - Click "Send Test Email" or "Preview"
+
+## API Integrations Settings
+
+Go to **Settings → API Integrations tab** to manage API credentials:
+
+### Per-Venue Credentials
+- **Square**: Access token + Location ID (each venue has its own Square account)
+- **Gmail**: OAuth connect for email agent (each venue has its own inbox)
+
+### Organization Credentials
+- **Xero**: OAuth connect for financial reporting (shared across venues in same org)
+
+### Global Credentials
+- **Resend**: API key for email delivery (single account for all venues)
+
+### Required Environment Variables
+
+For OAuth flows to work, these must be set in Supabase Edge Function secrets:
+
+| Variable | Purpose |
+|----------|---------|
+| `CREDENTIALS_ENCRYPTION_KEY` | AES-256 key for encrypting stored credentials (or reuse `TOKEN_ENCRYPTION_KEY`) |
+| `XERO_CLIENT_ID` | Xero OAuth app client ID |
+| `XERO_CLIENT_SECRET` | Xero OAuth app client secret |
+
+Existing env vars (`SQUARE_ACCESS_TOKEN`, `RESEND_API_KEY`, etc.) continue to work as fallbacks.
 
 ## UI Patterns
 

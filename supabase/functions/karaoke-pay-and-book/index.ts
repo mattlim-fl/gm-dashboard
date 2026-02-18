@@ -1,7 +1,10 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-expect-error - Deno remote import types
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
 import { chargeSquare, refundSquarePayment, toIdempotencyKey, createSquareOrder } from "../_shared/square.ts"
+import { getSquareCredentials } from "../_shared/credentials.ts"
 
 // Minimal declaration for Deno global used for env access in Edge Functions
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -229,12 +232,10 @@ serve(async (req: Request) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')
-    const SQUARE_ACCESS_TOKEN = Deno.env.get('SQUARE_ACCESS_TOKEN')
-    const SQUARE_LOCATION_ID = Deno.env.get('SQUARE_LOCATION_ID')
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 500)
-    if (!SQUARE_ACCESS_TOKEN) return json({ success: false, error: 'Square access token not configured' }, 500)
-    if (!SQUARE_LOCATION_ID) return json({ success: false, error: 'Square location ID not configured' }, 500)
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     const body = (await req.json()) as JsonBody
     const input: PayAndBookRequest = {
@@ -284,6 +285,13 @@ serve(async (req: Request) => {
 
     const boothCents = Math.round(Number(hourlyRate) * durationHours * 100)
     const ticketQty = Math.max(0, Number(input.ticketQuantity || input.guestCount || 0))
+
+    // Get Square credentials from DB with env var fallback
+    const squareCreds = await getSquareCredentials(supabase, input.venue)
+    if (!squareCreds) {
+      return json({ success: false, error: 'Square credentials not configured for venue' }, 500)
+    }
+    const { accessToken: SQUARE_ACCESS_TOKEN, locationId: SQUARE_LOCATION_ID } = squareCreds
 
     // Pricing and Square catalog item variation IDs
     const TICKET_PRICE_CENTS = 1000 // $10 per ticket

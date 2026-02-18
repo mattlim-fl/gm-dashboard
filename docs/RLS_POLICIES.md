@@ -4,7 +4,7 @@ This document outlines the Row Level Security policies implemented across all ta
 
 ## Overview
 
-All 15 tables in the `public` schema now have RLS enabled with appropriate policies to ensure data security while maintaining functionality for authenticated staff users.
+All tables in the `public` schema have RLS enabled with appropriate policies to ensure data security while maintaining functionality for authenticated staff users.
 
 ## Security Model
 
@@ -90,6 +90,15 @@ These tables allow staff to read and system to update:
 | `staff_profiles` | ✅ Enabled | Full CRUD | None |
 | `karaoke_booth_holds` | ✅ Enabled | Full CRUD | None |
 | `email_events` | ✅ Enabled | Read Only | Insert |
+
+### API Credential Tables
+| Table | RLS Status | Staff Access | System Access |
+|-------|------------|--------------|---------------|
+| `organizations` | ✅ Enabled | Read Only | Full CRUD |
+| `venue_organizations` | ✅ Enabled | Read Only | Full CRUD |
+| `venue_api_credentials` | ✅ Enabled | Read/Insert/Update | Full CRUD |
+
+**Note:** Credentials in `venue_api_credentials` are encrypted with AES-256-GCM before storage. Only edge functions can decrypt them using the server-side encryption key.
 
 ## Policy Implementation Details
 
@@ -203,6 +212,7 @@ SELECT auth.uid(), auth.role();
 ```
 
 ## Last Updated
-- **Date**: January 2025
-- **Version**: 1.0
+- **Date**: February 2026
+- **Version**: 1.1
 - **Status**: All tables secured with RLS policies
+- **Changes**: Added API credential tables (organizations, venue_organizations, venue_api_credentials)

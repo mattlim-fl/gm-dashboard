@@ -37,13 +37,19 @@ GM Dashboard is a modern web application built on a serverless architecture with
 │  └────────────────────────────────────────────────────────┘    │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
-                ┌───────────┴───────────┐
-                │                       │
-┌───────────────▼──────┐   ┌────────────▼─────────┐
-│   Square API         │   │    Xero API          │
-│   - Payment sync     │   │    - P&L data        │
-│   - Location data    │   │    - OAuth2          │
-└──────────────────────┘   └──────────────────────┘
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+┌───────▼──────┐   ┌────────▼───────┐   ┌──────▼───────┐
+│ Square API   │   │   Xero API     │   │  Gmail API   │
+│ - Payments   │   │   - P&L data   │   │  - Email     │
+│ - Per-venue  │   │   - Per-org    │   │  - Per-venue │
+└──────────────┘   └────────────────┘   └──────────────┘
+        │
+┌───────▼──────┐
+│ Resend API   │
+│ - Email send │
+│ - Global     │
+└──────────────┘
 ```
 
 ## Technology Stack
@@ -98,12 +104,22 @@ GM Dashboard is a modern web application built on a serverless architecture with
 - Payment processing
 - Payment sync for revenue tracking
 - Location management
-- OAuth2 authentication
+- Per-venue credentials (each venue has its own Square account)
 
 **Xero API**
 - Profit & Loss data sync
 - OAuth2 authentication
 - Cached snapshots for performance
+- Per-organization credentials (grouped venues share one Xero account)
+
+**Gmail API**
+- Email agent for automated responses
+- OAuth2 authentication
+- Per-venue credentials (each venue has its own inbox)
+
+**Resend API**
+- Transactional email delivery
+- Global credentials (single account for all venues)
 
 ## Database Schema
 
@@ -220,16 +236,49 @@ Square location metadata.
 - `venue_mapping` (text) - Maps to our venue names
 - `created_at`, `updated_at`
 
-#### xero_connections
-Xero OAuth credentials.
+### API Credential Tables
+
+#### organizations
+Organization groupings for venues.
+
+**Key Columns:**
+- `id` (text, PK) - e.g., 'fractal', 'daisies'
+- `name` (text) - Display name
+- `created_at` (timestamp)
+
+**Default Data:**
+- `fractal` → "Fractal Hospitality" (owns Manor, Hippie Club)
+- `daisies` → "Daisies" (owns Daisy)
+
+#### venue_organizations
+Maps venues to their parent organizations.
+
+**Key Columns:**
+- `venue` (text, PK) - e.g., 'manor', 'hippie', 'daisy'
+- `organization_id` (text, FK → organizations)
+
+#### venue_api_credentials
+Encrypted API credentials with flexible scoping.
 
 **Key Columns:**
 - `id` (uuid, PK)
-- `tenant_id` (text)
-- `access_token` (text, encrypted)
-- `refresh_token` (text, encrypted)
-- `expires_at` (timestamp)
+- `venue` (text, nullable) - Set for per-venue credentials (Square, Gmail)
+- `organization_id` (text, nullable, FK → organizations) - Set for per-org credentials (Xero)
+- `integration_type` (text) - 'square', 'xero', 'gmail', 'resend'
+- `credentials_encrypted` (text) - AES-256-GCM encrypted JSON
+- `is_active` (boolean)
+- `last_verified_at` (timestamp)
+- `verification_status` (text) - 'pending', 'verified', 'failed'
+- `verification_error` (text)
+- `oauth_expires_at` (timestamp)
 - `created_at`, `updated_at`
+
+**Scoping Logic:**
+- Per-venue (Square, Gmail): `venue` is set, `organization_id` is null
+- Per-organization (Xero): `venue` is null, `organization_id` is set
+- Global (Resend): Both `venue` and `organization_id` are null
+
+**Unique Constraint:** One credential per scope+type combination via unique index.
 
 #### xero_pnl_snapshots
 Cached Xero P&L data.
@@ -391,7 +440,14 @@ All tables have RLS policies that enforce:
 - RLS policies on all tables
 - Service role key never exposed to frontend
 - Anon key used for frontend (limited permissions)
-- Encrypted credentials for external APIs
+- API credentials encrypted with AES-256-GCM before storage
+- Credentials encryption key stored as environment variable
+
+**Credential Storage:**
+- All API credentials (Square, Xero, Gmail, Resend) stored encrypted in `venue_api_credentials`
+- Encryption/decryption happens in edge functions only
+- Frontend never has access to raw credentials
+- Verification status tracked for monitoring
 
 ## Performance Optimizations
 
@@ -440,7 +496,7 @@ All tables have RLS policies that enforce:
 ### Growth Strategy
 
 **Phase 1 (Current):**
-- 2 venues (Manor, Hippie Club)
+- 3 venues (Manor, Hippie Club, Daisy)
 - ~500 bookings/month
 - 10-20 staff users
 

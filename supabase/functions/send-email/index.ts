@@ -1,5 +1,9 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-expect-error - Deno remote import types
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
+import { getResendCredentials } from "../_shared/credentials.ts"
+
 // Minimal declaration for Deno global used for env access in Edge Functions
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const Deno: any
@@ -668,7 +672,20 @@ serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
   try {
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+
+    // Get Resend credentials from DB with env var fallback
+    let RESEND_API_KEY: string | undefined
+    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      const resendCreds = await getResendCredentials(supabase)
+      RESEND_API_KEY = resendCreds?.apiKey
+    }
+    // Fallback to env var if DB lookup fails
+    if (!RESEND_API_KEY) {
+      RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
+    }
     if (!RESEND_API_KEY) return json({ success: false, error: "RESEND_API_KEY is not configured" }, 500)
 
     const body = (await req.json()) as TemplatePayload
