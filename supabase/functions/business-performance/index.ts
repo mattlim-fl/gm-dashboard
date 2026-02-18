@@ -773,19 +773,18 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
 }
 
 function generateWhatsAppMessage(data: BusinessPerformanceData): string {
-  const formatChange = (change: number, unit: 'percent' | 'pp' = 'percent') => {
+  const formatChange = (change: number) => {
     const sign = change > 0 ? '+' : ''
-    const suffix = unit === 'pp' ? 'pp' : '%'
-    return `${sign}${change.toFixed(1)}${suffix}`
+    return `${sign}${change.toFixed(1)}%`
   }
 
   return `Weekly Performance Report
 
 ${data.saturdayLabels.current}
 Revenue - ${formatCurrency(data.current.revenue)} (${formatChange(data.changes.revenueVsAvg)} vs avg)
-Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}%, ${formatChange(data.changes.wagesVsAvg, 'pp')} vs avg)
-COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}%, ${formatChange(data.changes.cogsVsAvg, 'pp')} vs avg)
-Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}%, ${formatChange(data.changes.securityVsAvg, 'pp')} vs avg)
+Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}%, ${formatChange(data.changes.wagesVsAvg)} vs avg)
+COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}%, ${formatChange(data.changes.cogsVsAvg)} vs avg)
+Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}%, ${formatChange(data.changes.securityVsAvg)} vs avg)
 Attendance - ${data.current.attendance.toLocaleString()} (${formatChange(data.changes.attendanceVsAvg)} vs avg)
 Spend Per Head - ${formatCurrency(data.current.spendPerHead)} (${formatChange(data.changes.spendPerHeadVsAvg)} vs avg)
 
@@ -842,12 +841,11 @@ function formatSaturdaySubtitle(startDate: Date, endDate: Date): string {
 
 /**
  * Generate a directional indicator HTML snippet
- * @param change - The change value (% or pp)
+ * @param change - The change value (%)
  * @param invertDirection - If true, negative change = good (for cost metrics)
- * @param unit - 'percent' for %, 'pp' for percentage points
  * @param isAvailable - Whether comparison data is available
  */
-function generateIndicator(change: number, invertDirection: boolean, unit: 'percent' | 'pp', isAvailable: boolean): string {
+function generateIndicator(change: number, invertDirection: boolean, isAvailable: boolean): string {
   if (!isAvailable) {
     return `<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:#f1f5f9;color:#94a3b8;text-align:center;line-height:20px;font-size:12px;vertical-align:middle;">&#8211;</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#94a3b8;margin-left:6px;vertical-align:middle;">n/a</span>`
   }
@@ -887,8 +885,7 @@ function generateIndicator(change: number, invertDirection: boolean, unit: 'perc
   }
 
   const sign = change > 0 ? '+' : ''
-  const suffix = unit === 'pp' ? 'pp' : '%'
-  const displayValue = `${sign}${change.toFixed(1)}${suffix}`
+  const displayValue = `${sign}${change.toFixed(1)}%`
 
   return `<span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${arrowBg};color:${arrowColor};text-align:center;line-height:20px;font-size:12px;vertical-align:middle;">${arrowChar}</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#1a1a2e;margin-left:6px;vertical-align:middle;">${displayValue}</span>`
 }
@@ -915,49 +912,49 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
       metric: 'Revenue',
       value: formatCurrency(data.current.revenue),
       valueSuffix: '',
-      wow: generateIndicator(data.changes.revenuePercent, false, 'percent', true),
-      vsAvg: generateIndicator(data.changes.revenueVsAvg, false, 'percent', avgRevenueAvailable),
-      yoy: generateIndicator(data.changes.revenueYoY, false, 'percent', yoyRevenueAvailable),
+      wow: generateIndicator(data.changes.revenuePercent, false, true),
+      vsAvg: generateIndicator(data.changes.revenueVsAvg, false, avgRevenueAvailable),
+      yoy: generateIndicator(data.changes.revenueYoY, false, yoyRevenueAvailable),
     },
     {
       metric: 'Wages',
       value: formatCurrency(data.current.wages),
       valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.wagesPercent.toFixed(1)}%)</span>`,
-      wow: generateIndicator(data.changes.wagesPercentChange, true, 'pp', true),
-      vsAvg: generateIndicator(data.changes.wagesVsAvg, true, 'pp', avgCostDataAvailable),
-      yoy: generateIndicator(data.changes.wagesYoY, true, 'pp', yoyCostDataAvailable),
+      wow: generateIndicator(data.changes.wagesPercentChange, true, true),
+      vsAvg: generateIndicator(data.changes.wagesVsAvg, true, avgCostDataAvailable),
+      yoy: generateIndicator(data.changes.wagesYoY, true, yoyCostDataAvailable),
     },
     {
       metric: 'COGS',
       value: formatCurrency(data.current.cogs),
       valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.cogsPercent.toFixed(1)}%)</span>`,
-      wow: generateIndicator(data.changes.cogsPercentChange, true, 'pp', true),
-      vsAvg: generateIndicator(data.changes.cogsVsAvg, true, 'pp', avgCostDataAvailable),
-      yoy: generateIndicator(data.changes.cogsYoY, true, 'pp', yoyCostDataAvailable),
+      wow: generateIndicator(data.changes.cogsPercentChange, true, true),
+      vsAvg: generateIndicator(data.changes.cogsVsAvg, true, avgCostDataAvailable),
+      yoy: generateIndicator(data.changes.cogsYoY, true, yoyCostDataAvailable),
     },
     {
       metric: 'Security',
       value: formatCurrency(data.current.security),
       valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.securityPercent.toFixed(1)}%)</span>`,
-      wow: generateIndicator(data.changes.securityPercentChange, true, 'pp', true),
-      vsAvg: generateIndicator(data.changes.securityVsAvg, true, 'pp', avgCostDataAvailable),
-      yoy: generateIndicator(data.changes.securityYoY, true, 'pp', yoyCostDataAvailable),
+      wow: generateIndicator(data.changes.securityPercentChange, true, true),
+      vsAvg: generateIndicator(data.changes.securityVsAvg, true, avgCostDataAvailable),
+      yoy: generateIndicator(data.changes.securityYoY, true, yoyCostDataAvailable),
     },
     {
       metric: 'Attendance',
       value: data.current.attendance.toLocaleString(),
       valueSuffix: '',
-      wow: generateIndicator(data.changes.attendancePercent, false, 'percent', true),
-      vsAvg: generateIndicator(data.changes.attendanceVsAvg, false, 'percent', avgAttendanceAvailable),
-      yoy: generateIndicator(data.changes.attendanceYoY, false, 'percent', yoyAttendanceAvailable),
+      wow: generateIndicator(data.changes.attendancePercent, false, true),
+      vsAvg: generateIndicator(data.changes.attendanceVsAvg, false, avgAttendanceAvailable),
+      yoy: generateIndicator(data.changes.attendanceYoY, false, yoyAttendanceAvailable),
     },
     {
       metric: 'Spend Per Head',
       value: formatCurrency(data.current.spendPerHead),
       valueSuffix: '',
-      wow: generateIndicator(data.changes.spendPerHeadPercent, false, 'percent', true),
-      vsAvg: generateIndicator(data.changes.spendPerHeadVsAvg, false, 'percent', avgSpendAvailable),
-      yoy: generateIndicator(data.changes.spendPerHeadYoY, false, 'percent', yoySpendAvailable),
+      wow: generateIndicator(data.changes.spendPerHeadPercent, false, true),
+      vsAvg: generateIndicator(data.changes.spendPerHeadVsAvg, false, avgSpendAvailable),
+      yoy: generateIndicator(data.changes.spendPerHeadYoY, false, yoySpendAvailable),
     },
   ]
 
