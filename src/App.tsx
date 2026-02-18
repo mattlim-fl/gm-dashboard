@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -16,18 +16,16 @@ import Bookings from "./pages/Bookings";
 import CreateBooking from "./pages/CreateBooking";
 import NotFound from "./pages/NotFound";
 import RunSheet from "./pages/RunSheet";
-import Customers from "./pages/Customers";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 
 import Revenue from "./pages/Revenue";
 import BoothManagement from "./pages/BoothManagement";
 import ProfitAndLoss from "./pages/ProfitAndLoss";
-import Occasions from "./pages/Occasions";
 import Team from "./pages/Team";
 import Photos from "./pages/Photos";
-import Members from "./pages/Members";
 import MemberCheckin from "./pages/MemberCheckin";
+import Guests from "./pages/Guests";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,11 +75,15 @@ const App = () => (
                   <RunSheet />
                 </ProtectedRoute>
               } />
-              <Route path="/customers" element={
+              <Route path="/guests" element={
                 <ProtectedRoute>
-                  <Customers />
+                  <Guests />
                 </ProtectedRoute>
               } />
+              {/* Redirects for old URLs */}
+              <Route path="/customers" element={<Navigate to="/guests?tab=customers" replace />} />
+              <Route path="/members" element={<Navigate to="/guests?tab=members" replace />} />
+              <Route path="/occasions" element={<Navigate to="/bookings?tab=occasions" replace />} />
               <Route path="/revenue" element={
                 <AdminRoute>
                   <Revenue />
@@ -102,11 +104,6 @@ const App = () => (
                   <BoothManagement />
                 </ProtectedRoute>
               } />
-              <Route path="/occasions" element={
-                <ProtectedRoute>
-                  <Occasions />
-                </ProtectedRoute>
-              } />
               <Route path="/team" element={
                 <AdminRoute>
                   <Team />
@@ -115,11 +112,6 @@ const App = () => (
               <Route path="/photos" element={
                 <ProtectedRoute>
                   <Photos />
-                </ProtectedRoute>
-              } />
-              <Route path="/members" element={
-                <ProtectedRoute>
-                  <Members />
                 </ProtectedRoute>
               } />
               <Route path="/members/checkin" element={

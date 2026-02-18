@@ -135,7 +135,7 @@ const MemberCheckin = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <Button variant="ghost" asChild>
-            <Link to="/members">
+            <Link to="/guests?tab=members">
               <ArrowLeft className="h-5 w-5 mr-2" />
               Back to Members
             </Link>

@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Home, Calendar, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, PartyPopper, Users2, Image, Star } from "lucide-react";
+import { Home, Calendar, Users, BarChart3, Settings, CalendarDays, DollarSign, Building, ListChecks, Users2, Image } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { LastSyncIndicator } from "./LastSyncIndicator";
@@ -62,19 +62,9 @@ const operationsItems: MenuItem[] = [
     icon: CalendarDays,
   },
   {
-    title: "Occasions",
-    url: "/occasions",
-    icon: PartyPopper,
-  },
-  {
-    title: "Customers",
-    url: "/customers",
+    title: "Guests",
+    url: "/guests",
     icon: Users,
-  },
-  {
-    title: "Members",
-    url: "/members",
-    icon: Star,
   },
 ];
 
