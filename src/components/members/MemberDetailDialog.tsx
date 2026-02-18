@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Star, Edit2, Save, X, Calendar, Phone, User, Clock } from "lucide-react";
+import { Star, Edit2, Save, X, Calendar, Phone, User, Clock, StickyNote } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Member, MemberStatus } from "@/services/memberService";
 import { useUpdateMember, useRecordFirstVisit } from "@/hooks/useMembers";
 import { format } from "date-fns";
@@ -34,6 +35,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
     name: "",
     phone: "",
     status: "active" as MemberStatus,
+    notes: "",
   });
 
   const updateMember = useUpdateMember();
@@ -45,6 +47,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
         name: member.name,
         phone: member.phone,
         status: member.status,
+        notes: member.notes || "",
       });
       setIsEditing(false);
     }
@@ -87,6 +90,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
           name: formData.name,
           phone: formData.phone,
           status: formData.status,
+          notes: formData.notes || null,
         },
       });
       setIsEditing(false);
@@ -186,6 +190,17 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="e.g., Bar card holder, +2 friends entry..."
+                  rows={3}
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <Button
                   variant="outline"
@@ -194,6 +209,7 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
                       name: member.name,
                       phone: member.phone,
                       status: member.status,
+                      notes: member.notes || "",
                     });
                     setIsEditing(false);
                   }}
@@ -283,6 +299,22 @@ export function MemberDetailDialog({ member, isOpen, onClose }: MemberDetailDial
                   )}
                 </CardContent>
               </Card>
+
+              {member.notes && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <StickyNote className="h-4 w-4" />
+                      Notes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gm-neutral-600 whitespace-pre-wrap">
+                      {member.notes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </>
           )}
         </div>

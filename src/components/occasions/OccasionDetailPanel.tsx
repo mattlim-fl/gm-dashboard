@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { occasionService, OccasionWithStats } from '@/services/occasionService';
+import { supabase } from '@/integrations/supabase/client';
 import { Copy, Check, ExternalLink, Users, Calendar, DollarSign, Mail, Phone, Plus, UserPlus, Trash2, Edit, Save, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import GuestListGrouped from './GuestListGrouped';
@@ -21,7 +22,7 @@ interface OccasionDetailPanelProps {
 export default function OccasionDetailPanel({ occasionId, open, onOpenChange, onRefresh }: OccasionDetailPanelProps) {
   const [occasion, setOccasion] = useState<OccasionWithStats | null>(null);
   const [bookings, setBookings] = useState<any[]>([]);
-  const [allGuests, setAllGuests] = useState<{ name: string; invitedBy: string; isOrganiser: boolean; bookingId: string; index: number }[]>([]);
+  const [allGuests, setAllGuests] = useState<{ name: string; invitedBy: string; isOrganiser: boolean; bookingId: string; index: number; notes?: string; guestId?: string }[]>([]);
   const [editingGuests, setEditingGuests] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,7 +66,7 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
       setEditingTicketPrice(occasionData.ticket_price_cents / 100);
       
       // Build flat guest list
-      const guests: { name: string; invitedBy: string; isOrganiser: boolean; bookingId: string; index: number }[] = [];
+      const guests: { name: string; invitedBy: string; isOrganiser: boolean; bookingId: string; index: number; notes?: string; guestId?: string }[] = [];
       
       // Add organiser first
       if (occasionData.organiser_name) {
@@ -86,13 +87,16 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
         
         // Add all tickets (with or without names)
         for (let i = 0; i < ticketQuantity; i++) {
-          const guestName = existingGuests[i]?.guest_name || '';
+          const guestRecord = existingGuests[i];
+          const guestName = guestRecord?.guest_name || '';
           guests.push({
             name: guestName,
             invitedBy,
             isOrganiser: false,
             bookingId: booking.id,
-            index: i
+            index: i,
+            notes: guestRecord?.notes || '',
+            guestId: guestRecord?.id,
           });
         }
       });
@@ -292,6 +296,53 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
       alert(errorMessage);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleGuestNotesChange = async (bookingId: string, guestIndex: number, notes: string) => {
+    // Find the guest to get its ID
+    const guest = allGuests.find(g => g.bookingId === bookingId && g.index === guestIndex);
+
+    if (!guest) return;
+
+    try {
+      if (guest.guestId) {
+        // Update existing guest record
+        const { error } = await supabase
+          .from('booking_guests')
+          .update({ notes: notes || null })
+          .eq('id', guest.guestId);
+
+        if (error) {
+          console.error('Failed to update guest notes:', error);
+          return;
+        }
+      } else {
+        // Guest record doesn't exist yet - need to create it first
+        // This happens when a guest hasn't been named yet
+        const guestName = editingGuests[`${bookingId}-${guestIndex}`] || '';
+        const { error } = await supabase
+          .from('booking_guests')
+          .insert({
+            booking_id: bookingId,
+            guest_name: guestName,
+            notes: notes || null,
+          });
+
+        if (error) {
+          console.error('Failed to create guest with notes:', error);
+          return;
+        }
+      }
+
+      // Update local state
+      setAllGuests(prev => prev.map(g =>
+        g.bookingId === bookingId && g.index === guestIndex
+          ? { ...g, notes }
+          : g
+      ));
+    } catch (err) {
+      console.error('Error updating guest notes:', err);
     }
   };
 
@@ -594,6 +645,7 @@ export default function OccasionDetailPanel({ occasionId, open, onOpenChange, on
               onGuestNameChange={handleGuestNameChange}
               onDeleteGuest={handleDeleteGuest}
               onAddSingleGuest={addSingleGuest}
+              onGuestNotesChange={handleGuestNotesChange}
               showActions={true}
               isAtCapacity={occasion.remaining_capacity === 0}
             />

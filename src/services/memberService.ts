@@ -13,6 +13,7 @@ export interface Member {
   membership_expiry: string;
   first_visit_date: string | null;
   status: MemberStatus;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +23,7 @@ export interface MemberInsert {
   name: string;
   phone: string;
   date_of_birth?: string;
+  notes?: string;
 }
 
 export interface MemberUpdate {
@@ -30,6 +32,7 @@ export interface MemberUpdate {
   date_of_birth?: string;
   status?: MemberStatus;
   first_visit_date?: string | null;
+  notes?: string | null;
 }
 
 export interface MemberFilters {
@@ -221,6 +224,7 @@ export const memberService = {
         membership_expiry: member.membership_expiry,
         first_visit_date: member.first_visit_date,
         status: member.status,
+        notes: member.notes,
         created_at: member.created_at,
         updated_at: member.updated_at,
         isCheckedIn: !!checkedInAt,

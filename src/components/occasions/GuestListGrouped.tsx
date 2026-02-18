@@ -2,9 +2,13 @@ import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, Search, Trash2, UserPlus } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChevronDown, ChevronUp, Search, Trash2, UserPlus, StickyNote } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 export interface GuestItem {
   name: string;
@@ -13,6 +17,8 @@ export interface GuestItem {
   bookingId: string;
   index: number;
   bookingSource?: string;
+  notes?: string;
+  guestId?: string;
 }
 
 interface GuestListGroupedProps {
@@ -22,6 +28,7 @@ interface GuestListGroupedProps {
   onGuestNameChange: (bookingId: string, index: number, value: string) => void;
   onDeleteGuest?: (bookingId: string, index: number, name: string) => void;
   onAddSingleGuest?: () => void;
+  onGuestNotesChange?: (bookingId: string, guestIndex: number, notes: string) => void;
   readOnly?: boolean;
   showActions?: boolean;
   isAtCapacity?: boolean;
@@ -43,6 +50,7 @@ export default function GuestListGrouped({
   onGuestNameChange,
   onDeleteGuest,
   onAddSingleGuest,
+  onGuestNotesChange,
   readOnly = false,
   showActions = true,
   isAtCapacity = false,
@@ -146,6 +154,34 @@ export default function GuestListGrouped({
             </Badge>
           )}
         </td>
+        <td className="py-3 px-4">
+          {!guest.isOrganiser && onGuestNotesChange && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <StickyNote className={cn(
+                    "h-4 w-4",
+                    guest.notes ? "text-blue-500" : "text-gray-300 dark:text-gray-600"
+                  )} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64">
+                <div className="space-y-2">
+                  <Label>Guest Notes</Label>
+                  <Textarea
+                    defaultValue={guest.notes || ""}
+                    onBlur={(e) => onGuestNotesChange(guest.bookingId, guest.index, e.target.value)}
+                    placeholder="e.g., VIP, bar card..."
+                    rows={2}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Notes are saved automatically when you click away.
+                  </p>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </td>
         {showActions && (
           <td className="py-3 px-4 text-right">
             {!guest.isOrganiser && !readOnly && onDeleteGuest && (
@@ -211,6 +247,7 @@ export default function GuestListGrouped({
                       Invited By
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Tags</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">Notes</th>
                     {showActions && (
                       <th className="text-right py-3 px-4 text-xs font-semibold text-gray-700 dark:text-gray-300">
                         Actions
