@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { encryptToken, decryptToken } from "../_shared/crypto.ts"
+import { findSaturdayInRange, getSameSaturdayLastYear } from "../_shared/saturday-utils.ts"
 
 // Minimal declaration for Deno global
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -452,10 +453,28 @@ function calculateDateRanges(): {
 
   const previousEnd = new Date(currentStart.getTime() - 1)
 
-  // Year-over-Year: same period, 52 weeks ago (364 days)
-  // Using 52 weeks instead of 1 year preserves the day-of-week alignment
-  const yearAgoStart = new Date(currentStart.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
-  const yearAgoEnd = new Date(now.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+  // Year-over-Year: same Saturday number from the previous year
+  // e.g., "Saturday #15 of 2026" compares to "Saturday #15 of 2025"
+  // This is more meaningful for Saturday-only trading businesses
+  const currentSaturday = findSaturdayInRange(currentStart, now)
+  const yearAgoSaturday = currentSaturday ? getSameSaturdayLastYear(currentSaturday) : null
+
+  // Calculate the YoY comparison period (7 days centered around the year-ago Saturday)
+  let yearAgoStart: Date
+  let yearAgoEnd: Date
+
+  if (yearAgoSaturday) {
+    // Use the same relative position within the 7-day window
+    yearAgoEnd = new Date(yearAgoSaturday)
+    yearAgoEnd.setHours(23, 59, 59, 999)
+    yearAgoStart = new Date(yearAgoEnd)
+    yearAgoStart.setDate(yearAgoStart.getDate() - 7)
+    yearAgoStart.setHours(0, 0, 0, 0)
+  } else {
+    // Fallback: 52 weeks ago
+    yearAgoStart = new Date(currentStart.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+    yearAgoEnd = new Date(now.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+  }
 
   // 4-week average: weeks 2, 3, 4, 5 (excluding current week which is week 1)
   const avgWeeks: Array<{ start: Date; end: Date }> = []

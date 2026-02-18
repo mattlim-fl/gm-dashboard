@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/utils/currencyUtils";
+import { findSaturdayInRange, getSameSaturdayLastYear } from "@/lib/saturday-utils";
 
 export interface RevenueMetrics {
   current: number;
@@ -108,10 +109,27 @@ const calculateRollingFromWeeklyRPC = async (
     const now = new Date();
     const cutoffDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
     const previousCutoffDate = new Date(now.getTime() - (daysBack * 2 * 24 * 60 * 60 * 1000));
-    const yearAgoCutoffDate = new Date(cutoffDate);
-    yearAgoCutoffDate.setFullYear(yearAgoCutoffDate.getFullYear() - 1);
-    const yearAgoEndDate = new Date(now);
-    yearAgoEndDate.setFullYear(yearAgoEndDate.getFullYear() - 1);
+
+    // Year-over-Year: use Saturday numbering for meaningful comparison
+    // Find the Saturday in the current period and get the corresponding Saturday from last year
+    const currentSaturday = findSaturdayInRange(cutoffDate, now);
+    const yearAgoSaturday = currentSaturday ? getSameSaturdayLastYear(currentSaturday) : null;
+
+    let yearAgoCutoffDate: Date;
+    let yearAgoEndDate: Date;
+
+    if (yearAgoSaturday) {
+      // Center the year-ago period around the corresponding Saturday
+      yearAgoEndDate = new Date(yearAgoSaturday);
+      yearAgoEndDate.setHours(23, 59, 59, 999);
+      yearAgoCutoffDate = new Date(yearAgoEndDate.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+    } else {
+      // Fallback: calendar year subtraction
+      yearAgoCutoffDate = new Date(cutoffDate);
+      yearAgoCutoffDate.setFullYear(yearAgoCutoffDate.getFullYear() - 1);
+      yearAgoEndDate = new Date(now);
+      yearAgoEndDate.setFullYear(yearAgoEndDate.getFullYear() - 1);
+    }
 
     // Simple revenue queries
     const [currentRevenue, previousRevenue, yearAgoRevenue] = await Promise.all([

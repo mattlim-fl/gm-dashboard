@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
+import { findSaturdayInRange, getSameSaturdayLastYear } from "../_shared/saturday-utils.ts"
 
 // Minimal declaration for Deno global
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -204,9 +205,9 @@ function calculateDateRanges(): {
 } {
   const now = new Date()
 
-  // Find the most recent Saturday using 5am AWST boundaries
-  // Square uses 5am AWST as reporting day boundary (05:00 - 04:59 AWST)
-  // AWST is UTC+8, so 5am AWST = 21:00 UTC the day before
+  // Find the most recent Saturday using 6am AWST boundaries
+  // Trading runs Saturday 6pm - Sunday 6am, so we capture Saturday 6am - Sunday 6am
+  // AWST is UTC+8, so Saturday 6am AWST = Friday 22:00 UTC
   const currentSaturdayStart = new Date(now)
 
   // Get current day of week (0 = Sunday, 6 = Saturday)
@@ -220,11 +221,11 @@ function calculateDateRanges(): {
   // Go back to Saturday
   currentSaturdayStart.setUTCDate(currentSaturdayStart.getUTCDate() - daysSinceSaturday)
 
-  // Set to Friday 21:00 UTC (= Saturday 5am AWST)
+  // Set to Friday 22:00 UTC (= Saturday 6am AWST)
   currentSaturdayStart.setUTCDate(currentSaturdayStart.getUTCDate() - 1)
-  currentSaturdayStart.setUTCHours(21, 0, 0, 0)
+  currentSaturdayStart.setUTCHours(22, 0, 0, 0)
 
-  // End is 24 hours later (Saturday 21:00 UTC = Sunday 5am AWST)
+  // End is 24 hours later (Saturday 22:00 UTC = Sunday 6am AWST)
   const currentSaturdayEnd = new Date(currentSaturdayStart.getTime() + 24 * 60 * 60 * 1000)
 
   // If the current Saturday hasn't ended yet, use the previous Saturday
@@ -240,11 +241,28 @@ function calculateDateRanges(): {
   const previousSaturdayEnd = new Date(currentSaturdayEnd)
   previousSaturdayEnd.setUTCDate(previousSaturdayEnd.getUTCDate() - 7)
 
-  // Year-over-Year: same Saturday, 52 weeks ago (364 days)
-  // Using 52 weeks instead of 1 year preserves the day-of-week alignment
-  // (subtracting 1 year would land on a different day since calendars don't align)
-  const yearAgoStart = new Date(currentSaturdayStart.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
-  const yearAgoEnd = new Date(currentSaturdayEnd.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+  // Year-over-Year: same Saturday number from the previous year
+  // e.g., "Saturday #15 of 2026" compares to "Saturday #15 of 2025"
+  // This is more meaningful than 52-week lookback for Saturday-only trading businesses
+  const currentSaturday = findSaturdayInRange(currentSaturdayStart, currentSaturdayEnd)
+  const yearAgoSaturday = currentSaturday ? getSameSaturdayLastYear(currentSaturday) : null
+
+  // Calculate the YoY comparison period boundaries (Saturday 6am - Sunday 6am AWST)
+  // If we couldn't find the corresponding Saturday, fall back to 52-week lookback
+  let yearAgoStart: Date
+  let yearAgoEnd: Date
+
+  if (yearAgoSaturday) {
+    // Set to Friday 22:00 UTC (= Saturday 6am AWST) of the year-ago Saturday
+    yearAgoStart = new Date(yearAgoSaturday)
+    yearAgoStart.setUTCDate(yearAgoSaturday.getUTCDate() - 1)
+    yearAgoStart.setUTCHours(22, 0, 0, 0)
+    yearAgoEnd = new Date(yearAgoStart.getTime() + 24 * 60 * 60 * 1000)
+  } else {
+    // Fallback: 52 weeks ago
+    yearAgoStart = new Date(currentSaturdayStart.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+    yearAgoEnd = new Date(currentSaturdayEnd.getTime() - (52 * 7 * 24 * 60 * 60 * 1000))
+  }
 
   // 4-week average: weeks 2, 3, 4, 5 (excluding current week which is week 1)
   const avgWeeks: Array<{ start: Date; end: Date }> = []

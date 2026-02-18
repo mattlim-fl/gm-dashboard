@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useState, useCallback } from 'react';
+import { findSaturdayInRange, getSameSaturdayLastYear } from '@/lib/saturday-utils';
 
 export interface RevenueEvent {
   id: string;
@@ -102,10 +103,25 @@ async function fetchCoreStatisticsData(venueFilter?: string | null): Promise<Cor
   last7DaysStart.setDate(last7DaysStart.getDate() - 6);
   last7DaysStart.setHours(0, 0, 0, 0);
 
-  const last7DaysLastYearEnd = new Date(last7DaysEnd);
-  last7DaysLastYearEnd.setFullYear(last7DaysLastYearEnd.getFullYear() - 1);
-  const last7DaysLastYearStart = new Date(last7DaysStart);
-  last7DaysLastYearStart.setFullYear(last7DaysLastYearStart.getFullYear() - 1);
+  // Year-over-Year: use Saturday numbering for meaningful comparison
+  const last7DaysSaturday = findSaturdayInRange(last7DaysStart, last7DaysEnd);
+  const last7DaysYearAgoSaturday = last7DaysSaturday ? getSameSaturdayLastYear(last7DaysSaturday) : null;
+
+  let last7DaysLastYearStart: Date;
+  let last7DaysLastYearEnd: Date;
+
+  if (last7DaysYearAgoSaturday) {
+    last7DaysLastYearEnd = new Date(last7DaysYearAgoSaturday);
+    last7DaysLastYearEnd.setHours(23, 59, 59, 999);
+    last7DaysLastYearStart = new Date(last7DaysLastYearEnd);
+    last7DaysLastYearStart.setDate(last7DaysLastYearStart.getDate() - 6);
+    last7DaysLastYearStart.setHours(0, 0, 0, 0);
+  } else {
+    last7DaysLastYearEnd = new Date(last7DaysEnd);
+    last7DaysLastYearEnd.setFullYear(last7DaysLastYearEnd.getFullYear() - 1);
+    last7DaysLastYearStart = new Date(last7DaysStart);
+    last7DaysLastYearStart.setFullYear(last7DaysLastYearStart.getFullYear() - 1);
+  }
 
   // Last 28 days
   const last28DaysEnd = new Date(now);
@@ -113,10 +129,25 @@ async function fetchCoreStatisticsData(venueFilter?: string | null): Promise<Cor
   last28DaysStart.setDate(last28DaysStart.getDate() - 27);
   last28DaysStart.setHours(0, 0, 0, 0);
 
-  const last28DaysLastYearEnd = new Date(last28DaysEnd);
-  last28DaysLastYearEnd.setFullYear(last28DaysLastYearEnd.getFullYear() - 1);
-  const last28DaysLastYearStart = new Date(last28DaysStart);
-  last28DaysLastYearStart.setFullYear(last28DaysLastYearStart.getFullYear() - 1);
+  // Year-over-Year for 28 days: use Saturday numbering
+  const last28DaysSaturday = findSaturdayInRange(last28DaysStart, last28DaysEnd);
+  const last28DaysYearAgoSaturday = last28DaysSaturday ? getSameSaturdayLastYear(last28DaysSaturday) : null;
+
+  let last28DaysLastYearStart: Date;
+  let last28DaysLastYearEnd: Date;
+
+  if (last28DaysYearAgoSaturday) {
+    last28DaysLastYearEnd = new Date(last28DaysYearAgoSaturday);
+    last28DaysLastYearEnd.setHours(23, 59, 59, 999);
+    last28DaysLastYearStart = new Date(last28DaysLastYearEnd);
+    last28DaysLastYearStart.setDate(last28DaysLastYearStart.getDate() - 27);
+    last28DaysLastYearStart.setHours(0, 0, 0, 0);
+  } else {
+    last28DaysLastYearEnd = new Date(last28DaysEnd);
+    last28DaysLastYearEnd.setFullYear(last28DaysLastYearEnd.getFullYear() - 1);
+    last28DaysLastYearStart = new Date(last28DaysStart);
+    last28DaysLastYearStart.setFullYear(last28DaysLastYearStart.getFullYear() - 1);
+  }
 
   // Last 365 days
   const last365DaysEnd = new Date(now);
@@ -124,10 +155,25 @@ async function fetchCoreStatisticsData(venueFilter?: string | null): Promise<Cor
   last365DaysStart.setDate(last365DaysStart.getDate() - 364);
   last365DaysStart.setHours(0, 0, 0, 0);
 
-  const last365DaysLastYearEnd = new Date(last365DaysEnd);
-  last365DaysLastYearEnd.setFullYear(last365DaysLastYearEnd.getFullYear() - 1);
-  const last365DaysLastYearStart = new Date(last365DaysStart);
-  last365DaysLastYearStart.setFullYear(last365DaysLastYearStart.getFullYear() - 1);
+  // Year-over-Year for 365 days: use Saturday numbering
+  const last365DaysSaturday = findSaturdayInRange(last365DaysStart, last365DaysEnd);
+  const last365DaysYearAgoSaturday = last365DaysSaturday ? getSameSaturdayLastYear(last365DaysSaturday) : null;
+
+  let last365DaysLastYearStart: Date;
+  let last365DaysLastYearEnd: Date;
+
+  if (last365DaysYearAgoSaturday) {
+    last365DaysLastYearEnd = new Date(last365DaysYearAgoSaturday);
+    last365DaysLastYearEnd.setHours(23, 59, 59, 999);
+    last365DaysLastYearStart = new Date(last365DaysLastYearEnd);
+    last365DaysLastYearStart.setDate(last365DaysLastYearStart.getDate() - 364);
+    last365DaysLastYearStart.setHours(0, 0, 0, 0);
+  } else {
+    last365DaysLastYearEnd = new Date(last365DaysEnd);
+    last365DaysLastYearEnd.setFullYear(last365DaysLastYearEnd.getFullYear() - 1);
+    last365DaysLastYearStart = new Date(last365DaysStart);
+    last365DaysLastYearStart.setFullYear(last365DaysLastYearStart.getFullYear() - 1);
+  }
 
   // Calculate previous periods (same length, immediately before current period)
   const last7DaysPreviousEnd = new Date(last7DaysStart.getTime() - 1);
@@ -239,12 +285,27 @@ function getComparisonRanges(startDate: Date, endDate: Date) {
   const lastMonthEnd = new Date(lastMonthStart.getTime() + periodLengthMs);
   lastMonthEnd.setHours(23, 59, 59, 999);
 
-  // Same period from previous year
-  const lastYearStart = new Date(currentStart);
-  lastYearStart.setFullYear(lastYearStart.getFullYear() - 1);
-  lastYearStart.setHours(0, 0, 0, 0);
-  const lastYearEnd = new Date(lastYearStart.getTime() + periodLengthMs);
-  lastYearEnd.setHours(23, 59, 59, 999);
+  // Same period from previous year - use Saturday numbering for alignment
+  const currentSaturday = findSaturdayInRange(currentStart, currentEnd);
+  const yearAgoSaturday = currentSaturday ? getSameSaturdayLastYear(currentSaturday) : null;
+
+  let lastYearStart: Date;
+  let lastYearEnd: Date;
+
+  if (yearAgoSaturday) {
+    // Center the year-ago period around the corresponding Saturday
+    lastYearEnd = new Date(yearAgoSaturday);
+    lastYearEnd.setHours(23, 59, 59, 999);
+    lastYearStart = new Date(lastYearEnd.getTime() - periodLengthMs + (24 * 60 * 60 * 1000));
+    lastYearStart.setHours(0, 0, 0, 0);
+  } else {
+    // Fallback: calendar year subtraction
+    lastYearStart = new Date(currentStart);
+    lastYearStart.setFullYear(lastYearStart.getFullYear() - 1);
+    lastYearStart.setHours(0, 0, 0, 0);
+    lastYearEnd = new Date(lastYearStart.getTime() + periodLengthMs);
+    lastYearEnd.setHours(23, 59, 59, 999);
+  }
 
   return {
     current: { start: currentStart, end: currentEnd },

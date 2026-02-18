@@ -49,6 +49,7 @@ Edge functions share common utilities to avoid code duplication:
 | `retry.ts` | Exponential backoff with jitter for transient failures |
 | `errors.ts` | Standardized error classes (`PaymentError`, `BookingError`, etc.) |
 | `schemas.ts` | Zod schemas for runtime API response validation |
+| `saturday-utils.ts` | Saturday numbering for YoY comparisons (see below) |
 
 ### Usage in Edge Functions
 ```typescript
@@ -56,7 +57,26 @@ import { chargeSquare, refundSquarePayment } from "../_shared/square.ts"
 import { generateSecureCode, encryptToken } from "../_shared/crypto.ts"
 import { withRetry } from "../_shared/retry.ts"
 import { PaymentError, errorResponse } from "../_shared/errors.ts"
+import { getSameSaturdayLastYear, findSaturdayInRange } from "../_shared/saturday-utils.ts"
 ```
+
+### Saturday Numbering (YoY Comparisons)
+
+This is a Saturday-only trading business. YoY comparisons use **Saturday numbering** instead of calendar dates:
+
+- "Saturday #15 of 2026" compares to "Saturday #15 of 2025"
+- More meaningful than 52-week lookback (which drifts) or calendar subtraction (wrong day-of-week)
+
+**Key functions:**
+- `getSaturdayNumber(date)` - Returns 1-53 for which Saturday of the year
+- `getSameSaturdayLastYear(date)` - Returns the corresponding Saturday from last year
+- `findSaturdayInRange(start, end)` - Finds the Saturday within a date range
+
+**Edge case:** If current year has 53 Saturdays but last year had 52, Saturday #53 maps to #52.
+
+**Trade report boundaries:** Saturday 6am AWST → Sunday 6am AWST (captures full Saturday night trading 6pm-6am).
+
+**Frontend equivalent:** `src/lib/saturday-utils.ts` (same functions for hooks)
 
 ## Testing Edge Functions
 
@@ -77,6 +97,7 @@ Tests are in `supabase/functions/_shared/__tests__/`:
 - **crypto.test.ts** (18 tests) - HMAC, encryption round-trips, secure code generation
 - **retry.test.ts** (16 tests) - Retry behavior, exponential backoff, max retries
 - **square.test.ts** (10 tests) - Idempotency keys, utility functions
+- **saturday-utils.test.ts** (29 tests) - Saturday numbering, YoY mapping, edge cases
 
 ### Writing New Tests
 ```typescript
