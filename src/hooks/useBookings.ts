@@ -1,11 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { bookingService, CreateBookingData, BookingFilters } from '@/services/bookingService';
 import { useToast } from '@/hooks/use-toast';
+import { useVenue } from '@/contexts/VenueContext';
 
 export const useBookings = (filters?: BookingFilters) => {
+  const { selectedVenue } = useVenue();
+
+  // Merge venue context with explicit filters
+  // If selectedVenue is 'all', don't add venue filter (let RLS handle it)
+  // If selectedVenue is a specific venue, add it to filters
+  const effectiveFilters: BookingFilters = {
+    ...filters,
+    ...(selectedVenue !== 'all' && { venue: selectedVenue }),
+  };
+
   return useQuery({
-    queryKey: ['bookings', filters],
-    queryFn: () => bookingService.getBookings(filters),
+    queryKey: ['bookings', effectiveFilters, selectedVenue],
+    queryFn: () => bookingService.getBookings(effectiveFilters),
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 };

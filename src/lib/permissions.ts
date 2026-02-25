@@ -14,6 +14,10 @@ export function canManageTeam(role: StaffRole): boolean {
   return isAdmin(role);
 }
 
+export function canManageVenueAccess(role: StaffRole): boolean {
+  return isAdmin(role);
+}
+
 
 
 

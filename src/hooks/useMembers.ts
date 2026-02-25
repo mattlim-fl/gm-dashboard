@@ -1,13 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { memberService, MemberInsert, MemberUpdate, MemberFilters, Venue, MemberWithCheckin } from '@/services/memberService';
 import { useToast } from '@/hooks/use-toast';
+import { useVenue, Venue as VenueType } from '@/contexts/VenueContext';
 
 export type { MemberWithCheckin };
 
 export const useMembers = (filters?: MemberFilters) => {
+  const { selectedVenue } = useVenue();
+
+  // Merge venue context with explicit filters
+  // If selectedVenue is 'all', don't add venue filter (let RLS handle it)
+  // If selectedVenue is a specific venue, add it to filters
+  const effectiveFilters: MemberFilters = {
+    ...filters,
+    ...(selectedVenue !== 'all' && { venue: selectedVenue as Venue }),
+  };
+
   return useQuery({
-    queryKey: ['members', filters],
-    queryFn: () => memberService.fetchMembers(filters),
+    queryKey: ['members', effectiveFilters, selectedVenue],
+    queryFn: () => memberService.fetchMembers(effectiveFilters),
   });
 };
 
@@ -97,9 +108,15 @@ export const useRecordFirstVisit = () => {
 };
 
 export const useMembersWithCheckins = (date: string, venue?: Venue) => {
+  const { selectedVenue } = useVenue();
+
+  // If venue is explicitly passed, use it; otherwise use context
+  // If selectedVenue is 'all', pass undefined to get all accessible venues
+  const effectiveVenue = venue ?? (selectedVenue !== 'all' ? selectedVenue as Venue : undefined);
+
   return useQuery({
-    queryKey: ['members', 'checkins', date, venue],
-    queryFn: () => memberService.fetchMembersWithCheckins(date, venue),
+    queryKey: ['members', 'checkins', date, effectiveVenue, selectedVenue],
+    queryFn: () => memberService.fetchMembersWithCheckins(date, effectiveVenue),
     enabled: !!date,
   });
 };

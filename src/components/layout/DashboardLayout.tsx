@@ -3,6 +3,7 @@ import React from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "./AppSidebar";
+import { VenueSelector } from "./VenueSelector";
 import { useAuth } from "@/contexts/AuthContext";
 import { LogOut, User } from "lucide-react";
 import { useLocation } from "react-router-dom";
@@ -73,6 +74,7 @@ export function DashboardLayout({ children, headerActions }: DashboardLayoutProp
               </nav>
             </div>
             <div className="flex items-center space-x-4">
+              <VenueSelector />
               {headerActions}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { VenueProvider } from "@/contexts/VenueContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
 import { HomeRoute } from "@/components/auth/HomeRoute";
@@ -46,6 +47,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <AuthProvider>
+          <VenueProvider>
           <BrowserRouter>
             <Routes>
               <Route path="/auth" element={<Auth />} />
@@ -122,6 +124,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
+          </VenueProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
