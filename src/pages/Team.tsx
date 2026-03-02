@@ -1,29 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Trash2, Plus, UserCog, Building2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables, Enums } from '@/integrations/supabase/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAdmin } from '@/lib/permissions';
-import { ALL_VENUES, VENUE_LABELS, Venue } from '@/contexts/VenueContext';
+import { Venue } from '@/contexts/VenueContext';
+import {
+  InviteUserDialog,
+  TeamMemberTable,
+  VenueAccessSheet,
+} from '@/components/team';
 
 type AllowedEmail = Tables<'allowed_emails'>;
 type StaffRole = Enums<'staff_role'>;
@@ -359,281 +347,43 @@ export default function Team() {
             </p>
           </div>
           {isAdminUser && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Invite User
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Invite a team member</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleInvite} className="space-y-4 mt-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-email">Email</Label>
-                    <Input
-                      id="invite-email"
-                      type="email"
-                      required
-                      placeholder="user@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-role">Role</Label>
-                    <Select
-                      value={role}
-                      onValueChange={(value: StaffRole) => setRole(value)}
-                    >
-                      <SelectTrigger id="invite-role">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {role === 'user' && (
-                    <div className="space-y-2">
-                      <Label>Venue Access</Label>
-                      <p className="text-sm text-gm-neutral-500 mb-2">
-                        Select which venues this user can access. Users can only view data from their assigned venues.
-                      </p>
-                      <div className="space-y-2">
-                        {ALL_VENUES.map((venue) => (
-                          <div key={venue} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`venue-${venue}`}
-                              checked={selectedVenues.includes(venue)}
-                              onCheckedChange={(checked) => handleVenueToggle(venue, checked)}
-                            />
-                            <label
-                              htmlFor={`venue-${venue}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                            >
-                              {VENUE_LABELS[venue]}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                      {selectedVenues.length === 0 && (
-                        <p className="text-sm text-amber-600">
-                          Users with no venue access won't be able to see any data.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {role === 'admin' && (
-                    <p className="text-sm text-gm-neutral-500">
-                      Admins automatically have access to all venues.
-                    </p>
-                  )}
-                  <Button
-                    type="submit"
-                    className="w-full bg-gm-primary-500 hover:bg-gm-primary-600"
-                    disabled={inviteMutation.isPending}
-                  >
-                    {inviteMutation.isPending ? 'Inviting...' : 'Invite'}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+            <InviteUserDialog
+              open={isDialogOpen}
+              onOpenChange={setIsDialogOpen}
+              email={email}
+              onEmailChange={setEmail}
+              role={role}
+              onRoleChange={setRole}
+              selectedVenues={selectedVenues}
+              onVenueToggle={handleVenueToggle}
+              onSubmit={handleInvite}
+              isPending={inviteMutation.isPending}
+            />
           )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Allowed Emails</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8 text-gm-neutral-500">
-                Loading team...
-              </div>
-            ) : !allowedEmails || allowedEmails.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-gm-neutral-500">
-                <p className="mb-2">No team members have been invited yet.</p>
-                <p className="text-sm">Use the &quot;Invite User&quot; button above to get started.</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Venue Access</TableHead>
-                    <TableHead>Invited At</TableHead>
-                    <TableHead className="w-[80px] text-right">
-                      {isAdminUser ? 'Actions' : ''}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allowedEmails.map((row) => {
-                    const isOwner = row.email === 'matt@getproductbox.com';
-                    const isSelf = row.email === user?.email;
-                    const userVenues = getVenuesForEmail(row.email);
-
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">
-                          {row.email}
-                          {isOwner && (
-                            <span className="ml-2 text-xs text-gm-neutral-500">
-                              (Owner)
-                            </span>
-                          )}
-                          {isSelf && !isOwner && (
-                            <span className="ml-2 text-xs text-gm-neutral-500">
-                              (You)
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={row.role === 'admin' ? 'default' : 'outline'}>
-                            {row.role === 'admin' ? 'Admin' : 'User'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {row.role === 'admin' ? (
-                            <span className="text-sm text-gm-neutral-500">All venues</span>
-                          ) : userVenues.length === 0 ? (
-                            <span className="text-sm text-amber-600">No venues</span>
-                          ) : (
-                            <div className="flex gap-1 flex-wrap">
-                              {userVenues.map(venue => (
-                                <Badge key={venue} variant="secondary" className="text-xs">
-                                  {VENUE_LABELS[venue]}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {row.created_at
-                            ? new Date(row.created_at).toLocaleString()
-                            : '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {isAdminUser && !isOwner && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  disabled={updateRoleMutation.isPending || deleteMutation.isPending}
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                  <span className="sr-only">Actions</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {row.role === 'user' && (
-                                  <DropdownMenuItem onClick={() => setEditingUser(row)}>
-                                    <Building2 className="mr-2 h-4 w-4" />
-                                    Manage venues
-                                  </DropdownMenuItem>
-                                )}
-                                {!isSelf && (
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      updateRoleMutation.mutate({
-                                        id: row.id,
-                                        role: row.role === 'admin' ? 'user' : 'admin',
-                                      })
-                                    }
-                                  >
-                                    <UserCog className="mr-2 h-4 w-4" />
-                                    {row.role === 'admin' ? 'Make user' : 'Make admin'}
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem
-                                  onClick={() => deleteMutation.mutate({ id: row.id, email: row.email })}
-                                  className="text-red-600 focus:text-red-600"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Remove access
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+        <TeamMemberTable
+          allowedEmails={allowedEmails}
+          isLoading={isLoading}
+          isAdmin={isAdminUser}
+          currentUserEmail={user?.email}
+          getVenuesForEmail={getVenuesForEmail}
+          onEditVenues={setEditingUser}
+          onUpdateRole={(id, newRole) => updateRoleMutation.mutate({ id, role: newRole })}
+          onDelete={(id, email) => deleteMutation.mutate({ id, email })}
+          isUpdating={updateRoleMutation.isPending}
+          isDeleting={deleteMutation.isPending}
+        />
       </div>
 
-      {/* Venue Assignment Sidepanel */}
-      <Sheet open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Manage Venue Access</SheetTitle>
-          </SheetHeader>
-          {editingUser && (
-            <div className="mt-6 space-y-6">
-              <div>
-                <Label className="text-sm text-gm-neutral-500">User</Label>
-                <p className="font-medium">{editingUser.email}</p>
-              </div>
-
-              <div className="space-y-3">
-                <Label>Venue Access</Label>
-                <p className="text-sm text-gm-neutral-500">
-                  Select which venues this user can access.
-                </p>
-                <div className="space-y-3 pt-2">
-                  {ALL_VENUES.map((venue) => (
-                    <div key={venue} className="flex items-center space-x-3">
-                      <Checkbox
-                        id={`edit-venue-${venue}`}
-                        checked={editVenues.includes(venue)}
-                        onCheckedChange={(checked) => handleEditVenueToggle(venue, checked)}
-                      />
-                      <label
-                        htmlFor={`edit-venue-${venue}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {VENUE_LABELS[venue]}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-                {editVenues.length === 0 && (
-                  <p className="text-sm text-amber-600">
-                    Users with no venue access won't be able to see any data.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setEditingUser(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={handleSaveVenueAccess}
-                  disabled={updateVenueAccessMutation.isPending}
-                >
-                  {updateVenueAccessMutation.isPending ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      <VenueAccessSheet
+        editingUser={editingUser}
+        onClose={() => setEditingUser(null)}
+        editVenues={editVenues}
+        onVenueToggle={handleEditVenueToggle}
+        onSave={handleSaveVenueAccess}
+        isSaving={updateVenueAccessMutation.isPending}
+      />
     </DashboardLayout>
   );
 }
