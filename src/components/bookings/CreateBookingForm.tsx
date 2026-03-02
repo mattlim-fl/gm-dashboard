@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Calendar } from "@/components/ui/calendar";
@@ -17,10 +16,10 @@ import { useCreateBooking } from "@/hooks/useBookings";
 import { useKaraokeBooths, useCreateKaraokeHold, useReleaseKaraokeHold, useFinalizeKaraokeHold, useKaraokeAvailability } from "@/hooks/useKaraoke";
 import { karaokeService } from "@/services/karaokeService";
 import { useToast } from "@/hooks/use-toast";
-import { BookingCalendarView } from "./BookingCalendarView";
 import { createBookingSchema, type CreateBookingFormValues } from "@/schemas/bookingSchemas";
 import { VENUE_OPTIONS, BOOKING_TYPE_OPTIONS, VENUE_AREA_OPTIONS, TIME_SLOTS } from "@/constants/bookingConstants";
 import { handleErrorSilently } from "@/utils/errorHandling";
+import { CustomerInfoSection, KaraokeAvailabilityGrid, AdditionalInfoSection } from "./form-sections";
 
 interface AvailableBooth {
   id: string;
@@ -256,57 +255,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className={`grid gap-6 ${isSidePanel ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
           {/* Customer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Customer Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="customerName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Customer Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter customer name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="customerEmail"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="customer@example.com" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Provide either email or phone number
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="customerPhone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
-                    <FormControl>
-                      <Input type="tel" placeholder="+44 123 456 7890" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+          <CustomerInfoSection form={form} />
 
           {/* Booking Details */}
           <Card>
@@ -447,39 +396,14 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
 
               {/* Show venue-level availability grid for karaoke bookings */}
               {bookingType === "karaoke_booking" && venue && bookingDate && (
-                <div className="col-span-2">
-                  <div className="mb-2 text-sm text-gray-600">Select a time slot</div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {(venueAvailability?.slots || []).map((s) => {
-                      const isSelected = startTime === s.startTime && endTime === s.endTime;
-                      const disabled = !s.available;
-                      return (
-                        <button
-                          key={`${s.startTime}-${s.endTime}`}
-                          onClick={() => handleTimeSlotSelect(s.startTime, s.endTime)}
-                          disabled={disabled}
-                          className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                            isSelected ? 'bg-blue-500 text-white border-blue-500' : disabled ? 'bg-red-100 text-red-700 border-red-200' : 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200'
-                          } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                          {s.startTime} - {s.endTime}
-                          {Array.isArray(s.capacities) && s.capacities.length > 0 && (
-                            <div className="text-xs mt-1 text-gray-700">Caps: {s.capacities.join(', ')}</div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {!startTime && (
-                    <div className="mt-2 text-xs text-gray-500">Pick a date, then choose a time slot to see available booths.</div>
-                  )}
-                  {activeHoldId && holdExpiresAt && (
-                    <div className="mt-3 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-2">
-                      Hold created. Expires at: {new Date(holdExpiresAt).toLocaleTimeString()}.
-                      Submitting the form will confirm the booking.
-                    </div>
-                  )}
-                </div>
+                <KaraokeAvailabilityGrid
+                  slots={venueAvailability?.slots || []}
+                  selectedStartTime={startTime}
+                  selectedEndTime={endTime}
+                  onSlotSelect={handleTimeSlotSelect}
+                  activeHoldId={activeHoldId}
+                  holdExpiresAt={holdExpiresAt}
+                />
               )}
 
               {/* Karaoke booth field placeholder when time not selected */}
@@ -718,54 +642,7 @@ export const CreateBookingForm = ({ onSuccess, isSidePanel = false }: CreateBook
 
         {/* Additional Information - only show for non-VIP bookings */}
         {bookingType && bookingType !== "vip_tickets" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Additional Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="specialRequests"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Special Requests / Notes</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Any special requirements, dietary restrictions, or additional notes..."
-                        className="min-h-[80px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Customer facing notes and special requirements
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="staffNotes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Staff Notes</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Internal staff notes, reminders, or instructions..."
-                        className="min-h-[80px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Internal notes visible only to staff
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+          <AdditionalInfoSection form={form} />
         )}
 
         {/* Form Actions */}
