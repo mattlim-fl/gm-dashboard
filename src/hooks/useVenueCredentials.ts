@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { isAdmin } from '@/lib/permissions';
 
 export type IntegrationType = 'square' | 'xero' | 'gmail' | 'resend';
 
@@ -37,6 +39,8 @@ interface CredentialRow {
 }
 
 export function useVenueCredentials(venue: string | null, integrationType: IntegrationType) {
+  const { role } = useAuth();
+  const canManageIntegrations = isAdmin(role);
   const [status, setStatus] = useState<CredentialStatus>({
     isConfigured: false,
     isActive: false,
@@ -50,6 +54,19 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
   const [testing, setTesting] = useState(false);
 
   const fetchStatus = useCallback(async () => {
+    if (!canManageIntegrations) {
+      setStatus({
+        isConfigured: false,
+        isActive: false,
+        lastVerifiedAt: null,
+        verificationStatus: null,
+        verificationError: null,
+        oauthExpiresAt: null,
+      });
+      setLoading(false);
+      return;
+    }
+
     if (!venue && integrationType !== 'resend') {
       setStatus({
         isConfigured: false,
@@ -67,8 +84,8 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
       setLoading(true);
       let data: CredentialRow | null = null;
 
-      if (integrationType === 'square' || integrationType === 'gmail') {
-        // Per-venue credentials
+      if (integrationType === 'gmail') {
+        // Per-venue credentials - each venue has its own inbox
         const result = await supabase
           .from('venue_api_credentials')
           .select('*')
@@ -76,8 +93,8 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
           .eq('integration_type', integrationType)
           .maybeSingle();
         data = result.data as CredentialRow | null;
-      } else if (integrationType === 'xero') {
-        // Per-organization credentials - need to look up org first
+      } else if (integrationType === 'square' || integrationType === 'xero') {
+        // Per-organization credentials - org shares one account across venues
         const orgResult = await supabase
           .from('venue_organizations')
           .select('organization_id')
@@ -90,7 +107,7 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
             .select('*')
             .is('venue', null)
             .eq('organization_id', orgResult.data.organization_id)
-            .eq('integration_type', 'xero')
+            .eq('integration_type', integrationType)
             .maybeSingle();
           data = credResult.data as CredentialRow | null;
         }
@@ -120,13 +137,17 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
     } finally {
       setLoading(false);
     }
-  }, [venue, integrationType]);
+  }, [venue, integrationType, canManageIntegrations]);
 
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
 
   const saveCredentials = async (credentials: Record<string, string>) => {
+    if (!canManageIntegrations) {
+      return { success: false, error: 'Admin access required' };
+    }
+
     try {
       setSaving(true);
 
@@ -152,6 +173,10 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
   };
 
   const testConnection = async () => {
+    if (!canManageIntegrations) {
+      return { success: false, error: 'Admin access required' };
+    }
+
     try {
       setTesting(true);
 

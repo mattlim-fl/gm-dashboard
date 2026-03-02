@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+import { config } from '@/config/env';
+
+const API_BASE_URL = config.apiBaseUrl;
 
 export type PnlResponse = {
   period: { start: string; end: string };

@@ -102,7 +102,7 @@ BEGIN
 END$$;
 
 -- Comments for documentation
-COMMENT ON TABLE public.organizations IS 'Organization groupings for venues (e.g., Fractal owns Manor and Hippie)';
+COMMENT ON TABLE public.organizations IS 'Organization groupings for venues (e.g., Noxfolk owns Manor and Hippie)';
 COMMENT ON TABLE public.venue_organizations IS 'Maps venues to their parent organizations';
 COMMENT ON TABLE public.venue_api_credentials IS 'Encrypted API credentials with flexible scoping: per-venue, per-org, or global';
 COMMENT ON COLUMN public.venue_api_credentials.venue IS 'Set for per-venue credentials (Square, Gmail). NULL for org-level or global.';

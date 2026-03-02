@@ -242,12 +242,12 @@ Square location metadata.
 Organization groupings for venues.
 
 **Key Columns:**
-- `id` (text, PK) - e.g., 'fractal', 'daisies'
+- `id` (text, PK) - e.g., 'noxfolk', 'daisies'
 - `name` (text) - Display name
 - `created_at` (timestamp)
 
 **Default Data:**
-- `fractal` → "Fractal Hospitality" (owns Manor, Hippie Club)
+- `noxfolk` → "Noxfolk" (owns Manor, Hippie Club)
 - `daisies` → "Daisies" (owns Daisy)
 
 #### venue_organizations

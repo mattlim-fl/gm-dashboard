@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { isAdmin } from '@/lib/permissions';
 import {
   VenueCredentialSelector,
   SquareConfig,
@@ -13,8 +15,26 @@ import {
 import { Settings2 } from 'lucide-react';
 
 export const ApiSettings = () => {
+  const { role } = useAuth();
+  const canManageIntegrations = isAdmin(role);
   const [selectedVenue, setSelectedVenue] = useState('manor');
   const [isTransforming, setIsTransforming] = useState(false);
+
+  if (!canManageIntegrations) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>API Integrations</CardTitle>
+          <CardDescription>Admin access required.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            You don&apos;t have permission to view or change integration credentials.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const triggerTransform = async () => {
     setIsTransforming(true);
@@ -67,7 +87,6 @@ ${data.sample_results && data.sample_results.length > 0 ?
             Per-Venue Credentials
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <SquareConfig venue={selectedVenue} />
             <GmailConfig venue={selectedVenue} />
           </div>
         </div>
@@ -78,6 +97,7 @@ ${data.sample_results && data.sample_results.length > 0 ?
             Organization Credentials
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
+            <SquareConfig venue={selectedVenue} />
             <XeroConfig venue={selectedVenue} />
           </div>
         </div>

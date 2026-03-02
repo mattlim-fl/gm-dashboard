@@ -71,11 +71,11 @@ API credentials are stored encrypted in `venue_api_credentials` with flexible sc
 | Scope | Integration | Description |
 |-------|-------------|-------------|
 | **Per-venue** | Square, Gmail | Each venue has its own credentials |
-| **Per-organization** | Xero | Grouped venues share one (e.g., Manor+Hippie share Fractal's Xero) |
+| **Per-organization** | Xero | Grouped venues share one (e.g., Manor+Hippie share Noxfolk's Xero) |
 | **Global** | Resend | Single account for all venues |
 
 **Organization mapping:**
-- `fractal` → manor, hippie
+- `noxfolk` → manor, hippie
 - `daisies` → daisy
 
 **Key functions:**

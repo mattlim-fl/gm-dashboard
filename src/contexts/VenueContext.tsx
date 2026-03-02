@@ -2,17 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { isAdmin } from '@/lib/permissions';
+import { ALL_VENUES } from '@/types/venue';
+import type { Venue, VenueSelection } from '@/types/venue';
 
-export type Venue = 'manor' | 'hippie' | 'daisy';
-export type VenueSelection = Venue | 'all';
-
-export const ALL_VENUES: Venue[] = ['manor', 'hippie', 'daisy'];
-
-export const VENUE_LABELS: Record<Venue, string> = {
-  manor: 'Manor',
-  hippie: 'Hippie Club',
-  daisy: 'Daisy',
-};
+// Re-export for backwards compatibility
+export { ALL_VENUES, VENUE_LABELS, VENUE_OPTIONS } from '@/types/venue';
+export type { Venue, VenueSelection } from '@/types/venue';
 
 interface VenueContextType {
   accessibleVenues: Venue[];

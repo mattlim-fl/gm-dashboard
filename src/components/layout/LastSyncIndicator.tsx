@@ -3,10 +3,11 @@ import { Clock, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useSidebar } from '@/components/ui/sidebar';
-import { 
-  Tooltip, 
-  TooltipContent, 
-  TooltipTrigger 
+import { config } from '@/config/env';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
 } from '@/components/ui/tooltip';
 
 interface LastSyncIndicatorProps {
@@ -26,7 +27,7 @@ export const LastSyncIndicator: React.FC<LastSyncIndicatorProps> = ({ lastSyncTi
   const triggerSync = async () => {
     setIsSyncing(true);
     try {
-      const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:4000';
+      const API_BASE = config.apiBaseUrl;
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         alert('You must be signed in to trigger a sync.');

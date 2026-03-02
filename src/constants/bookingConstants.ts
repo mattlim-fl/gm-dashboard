@@ -3,11 +3,9 @@
  * Used across booking forms and components
  */
 
-export const VENUE_OPTIONS = [
-  { value: "manor", label: "Manor" },
-  { value: "hippie", label: "Hippie Club" },
-  { value: "daisy", label: "Daisy" },
-] as const;
+import { VENUE_OPTIONS } from '@/types/venue';
+export type { Venue } from '@/types/venue';
+export { VENUE_OPTIONS };
 
 export const BOOKING_TYPE_OPTIONS = [
   { value: "venue_hire", label: "Venue Hire" },
@@ -37,7 +35,6 @@ export const BOOKING_STATUS_OPTIONS = [
 ] as const;
 
 // Type exports for TypeScript
-export type Venue = typeof VENUE_OPTIONS[number]['value'];
 export type BookingType = typeof BOOKING_TYPE_OPTIONS[number]['value'];
 export type VenueArea = typeof VENUE_AREA_OPTIONS[number]['value'];
 export type BookingStatus = typeof BOOKING_STATUS_OPTIONS[number]['value'];

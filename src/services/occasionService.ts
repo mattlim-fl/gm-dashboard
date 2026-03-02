@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { config } from "@/config/env";
+import { getVenueWebsiteUrl } from "@/config/urls";
 
 export interface Occasion {
   id: string;
@@ -492,14 +494,7 @@ export const occasionService = {
    */
   getOrganiserUrl(occasion: Occasion): string {
     if (!occasion.organiser_token) return '';
-    
-    // Use localhost in development, production URLs otherwise
-    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const baseUrl = isDev
-      ? window.location.origin.replace('gm-dashboard', occasion.venue === 'manor' ? 'manor-perth-nightlife-ui' : 'hippie-club-ui')
-      : occasion.venue === 'manor' 
-        ? 'https://manorleederville.com' 
-        : 'https://hippieclub.com';
+    const baseUrl = getVenueWebsiteUrl(occasion.venue);
     return `${baseUrl}/occasion/${occasion.organiser_token}`;
   },
 
@@ -508,14 +503,7 @@ export const occasionService = {
    */
   getShareUrl(occasion: Occasion): string {
     if (!occasion.share_token) return '';
-    
-    // Use localhost in development, production URLs otherwise
-    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const baseUrl = isDev
-      ? window.location.origin.replace('gm-dashboard', occasion.venue === 'manor' ? 'manor-perth-nightlife-ui' : 'hippie-club-ui')
-      : occasion.venue === 'manor' 
-        ? 'https://manorleederville.com' 
-        : 'https://hippieclub.com';
+    const baseUrl = getVenueWebsiteUrl(occasion.venue);
     return `${baseUrl}/occasion/buy/${occasion.share_token}`;
   },
 };

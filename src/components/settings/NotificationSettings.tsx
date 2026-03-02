@@ -11,6 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Plus, X, Send, Eye, Clock, Mail } from 'lucide-react';
 import { formatHour, formatSchedule } from '@/utils/dateUtils';
+import { ContactFormRouting } from './ContactFormRouting';
+import { getGuestListUrl } from '@/config/urls';
+import type { Venue } from '@/types/venue';
 
 interface NotificationSettings {
   id: string;
@@ -445,7 +448,7 @@ function EmailTemplateTester() {
             startTime: '7:00 PM',
             endTime: '8:00 PM',
             guestCount: '4',
-            guestListUrl: `https://${venue === 'manor' ? 'manorleederville.com' : 'hippieclub.com'}/guest-list?token=test123`,
+            guestListUrl: getGuestListUrl(venue as Venue, 'test123'),
           },
         },
       });
@@ -729,7 +732,7 @@ function TicketEmailTester() {
             occasionName: 'Saturday Night Special',
             bookingDate: 'Saturday 1 February 2026',
             ticketQuantity: ticketQuantity,
-            guestListUrl: `https://${venue === 'manor' ? 'manorleederville.com' : 'hippieclub.com'}/guest-list?token=test123`,
+            guestListUrl: getGuestListUrl(venue as Venue, 'test123'),
           },
         },
       });
@@ -1288,6 +1291,8 @@ export function NotificationSettings() {
             updatingSchedule={updatingSchedule.businessPerf}
           />
         )}
+
+        <ContactFormRouting />
 
         <EmailTemplateTester />
         <TicketEmailTester />

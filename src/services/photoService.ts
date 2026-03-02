@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Venue } from '@/types/venue';
 
-export type Venue = 'hippie' | 'manor';
+// Re-export for backwards compatibility
+export type { Venue } from '@/types/venue';
 
 export interface PhotoAlbum {
   id: string;

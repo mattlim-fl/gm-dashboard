@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Venue } from '@/types/venue';
 
-export type Venue = 'manor' | 'hippie' | 'daisy';
+// Re-export for backwards compatibility
+export type { Venue } from '@/types/venue';
 export type MemberStatus = 'active' | 'expired' | 'cancelled';
 
 export interface Member {

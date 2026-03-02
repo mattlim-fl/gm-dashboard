@@ -1,7 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  KaraokeBoothRow, 
-  KaraokeBoothInsert, 
+import { config } from "@/config/env";
+import {
+  KaraokeBoothRow,
+  KaraokeBoothInsert,
   KaraokeBoothUpdate,
   KaraokeBookingRow,
   KaraokeBookingFormData,
@@ -364,7 +365,7 @@ export const karaokeService = {
   },
 
   async createHold(params: { boothId: string; venue: 'manor' | 'hippie'; bookingDate: string; startTime: string; endTime: string; sessionId: string; customerEmail?: string; ttlMinutes?: number }) {
-    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:4000';
+    const API_BASE = config.apiBaseUrl;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('User not authenticated');
     const res = await fetch(`${API_BASE}/karaoke/holds`, {
@@ -382,7 +383,7 @@ export const karaokeService = {
   },
 
   async extendHold(params: { holdId: string; sessionId: string; ttlMinutes?: number }) {
-    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:4000';
+    const API_BASE = config.apiBaseUrl;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('User not authenticated');
     const res = await fetch(`${API_BASE}/karaoke/holds`, {
@@ -400,7 +401,7 @@ export const karaokeService = {
   },
 
   async releaseHold(params: { holdId: string; sessionId: string }) {
-    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:4000';
+    const API_BASE = config.apiBaseUrl;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('User not authenticated');
     const res = await fetch(`${API_BASE}/karaoke/holds`, {
@@ -418,7 +419,7 @@ export const karaokeService = {
   },
 
   async finalizeHold(params: { holdId: string; sessionId: string; customerName: string; customerEmail?: string; customerPhone?: string; guestCount?: number }) {
-    const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:4000';
+    const API_BASE = config.apiBaseUrl;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('User not authenticated');
     const res = await fetch(`${API_BASE}/karaoke/finalize`, {
