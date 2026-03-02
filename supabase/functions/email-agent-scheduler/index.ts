@@ -124,7 +124,8 @@ serve(async (req: Request) => {
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 55000);
+        // Use 45s timeout to leave buffer before Edge Function's 60s limit
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
 
         const response = await fetch(
           `${SUPABASE_URL}/functions/v1/email-agent-process`,

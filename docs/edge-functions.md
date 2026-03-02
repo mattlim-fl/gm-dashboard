@@ -2,6 +2,10 @@
 
 This document describes all Supabase Edge Functions in the GM Dashboard application.
 
+## When to use this doc vs `api-runbook.md`
+
+- Use `docs/api-runbook.md` for **runtime API endpoints** the dashboard calls via Netlify Functions.\n+- Use this document for **Supabase Edge Function contracts** (purpose, auth model, inputs/outputs).\n+- Some Netlify API routes proxy into Edge Functions (e.g. Square sync routes); those proxies are documented in `api-runbook.md`.
+
 ## Base URL
 
 All edge functions are available at:
@@ -19,11 +23,11 @@ Most endpoints require authentication via:
 
 ### 1. karaoke-availability
 
-**Endpoint:** `GET /karaoke-availability`
+**Endpoint:** `POST /karaoke-availability`
 
 **Description:** Check availability for karaoke booths on a specific date.
 
-**Query Parameters:**
+**Request Body:**
 - `bookingDate` (required): Date in `YYYY-MM-DD` format
 - `boothId` (optional): Specific booth ID to check
 - `venue` (optional): `manor` or `hippie`
@@ -55,7 +59,10 @@ Most endpoints require authentication via:
 
 **Example:**
 ```bash
-curl "https://plksvatjdylpuhjitbfc.supabase.co/functions/v1/karaoke-availability?bookingDate=2025-01-15&venue=manor"
+curl -sS -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"bookingDate":"2025-01-15","venue":"manor"}' \
+  "https://plksvatjdylpuhjitbfc.supabase.co/functions/v1/karaoke-availability"
 ```
 
 ---
@@ -296,7 +303,7 @@ curl "https://plksvatjdylpuhjitbfc.supabase.co/functions/v1/karaoke-availability
 **Notes:**
 - Configuration is hardcoded in the function
 - Rarely changes, safe to cache client-side
-- No authentication required
+- Requires `x-api-key` header (`PUBLIC_BOOKING_API_KEY` secret)
 
 ---
 
@@ -508,6 +515,204 @@ supabase functions deploy karaoke-availability
 supabase functions logs karaoke-availability
 ```
 
+## Email Agent Functions
+
+The email agent is a PoC system that processes incoming emails for venues:
+1. Classifies emails using Claude Haiku
+2. Generates draft replies using Claude Sonnet
+3. Creates Gmail drafts for staff review (draft-only mode)
+
+### 11. email-agent-scheduler
+
+**Endpoint:** `POST /email-agent-scheduler`
+
+**Description:** Cron-triggered poller that checks which venues are due for email processing and invokes the process function for each.
+
+**Authentication:** Invoked by pg_cron (internal) or service role key
+
+**Schedule:** Every 5 minutes
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Scheduler run complete",
+  "summary": {
+    "processed": 1,
+    "skipped": 0,
+    "errors": 0
+  },
+  "results": [
+    {
+      "venue": "hippie",
+      "status": "processed",
+      "reason": "Processed 3 emails"
+    }
+  ]
+}
+```
+
+**Venue Statuses:**
+- `processed` - Successfully invoked email-agent-process
+- `skipped` - Not due yet or Gmail not connected
+- `error` - Process invocation failed
+
+---
+
+### 12. email-agent-process
+
+**Endpoint:** `POST /email-agent-process`
+
+**Description:** Main email processing orchestrator. Fetches unread emails, classifies them, generates drafts, and logs results.
+
+**Authentication:** Requires service role key or invoked by scheduler
+
+**Request Body:**
+```json
+{
+  "venue": "hippie"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "venue": "hippie",
+  "processed": 3,
+  "summary": {
+    "drafted": 2,
+    "skipped": 1,
+    "errors": 0
+  },
+  "results": [
+    {
+      "emailId": "msg123",
+      "threadId": "thread456",
+      "status": "drafted",
+      "category": "booking",
+      "draftId": "draft789"
+    }
+  ]
+}
+```
+
+**Processing Workflow:**
+1. Fetch venue config and Gmail access token
+2. List unread emails (max 10 per run)
+3. For each email:
+   - Check for duplicates (skip if already processed)
+   - Classify with Claude Haiku → 9 categories
+   - Apply Gmail label for the category
+   - If `auto_draft` enabled for category:
+     - Load knowledge files (global + category-specific)
+     - Get thread history for context
+     - Generate draft with Claude Sonnet
+     - Create Gmail draft and mark original as read
+4. Log all results to `email_agent_logs` table
+
+**Email Categories:**
+
+| Category | Auto-Draft | Description |
+|----------|-----------|-------------|
+| general_enquiry | ✅ | Opening hours, location, general info |
+| booking | ✅ | Table bookings, VIP requests |
+| lost_and_found | ✅ | Lost/found item reports |
+| complaint | ✅ | Negative experiences, refund requests |
+| ban_appeal | ✅ | Requests to lift venue bans |
+| event_enquiry | ✅ | DJ submissions, promoter pitches |
+| other | ✅ | Uncategorized emails |
+| supplier | ❌ | Vendor communications |
+| spam | ❌ | Marketing, newsletters, spam |
+
+---
+
+### 13. email-agent-oauth
+
+**Endpoint:** `GET/POST /email-agent-oauth/{action}`
+
+**Description:** Handles Gmail OAuth flow for connecting venue inboxes.
+
+**Authentication:** Public endpoints (OAuth flow requires user interaction)
+
+#### GET /start
+
+Initiates OAuth flow by redirecting to Google consent screen.
+
+**Query Parameters:**
+- `venue` (required): Venue key (e.g., `hippie`, `manor`)
+
+**Response:** 302 redirect to Google OAuth
+
+---
+
+#### GET /callback
+
+Handles OAuth callback from Google, exchanges code for tokens, and saves encrypted refresh token.
+
+**Query Parameters:**
+- `code` (required): Authorization code from Google
+- `state` (required): Base64-encoded venue data
+
+**Response:** 302 redirect to `/settings?tab=email-agent&success=gmail_connected`
+
+**Error Response:** 302 redirect to `/settings?tab=email-agent&error=...`
+
+---
+
+#### POST /disconnect
+
+Disconnects Gmail and clears stored tokens.
+
+**Request Body:**
+```json
+{
+  "venue": "hippie"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Gmail disconnected"
+}
+```
+
+---
+
+#### POST /test
+
+Tests Gmail connection by listing labels.
+
+**Request Body:**
+```json
+{
+  "venue": "hippie"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Gmail connection successful",
+  "mailbox": "info@hippieclub.com",
+  "labelCount": 15
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "error": "Gmail test failed",
+  "details": "Token expired - user needs to reconnect"
+}
+```
+
+---
+
 ## Environment Variables
 
 Required environment variables (set in Supabase dashboard):
@@ -519,6 +724,13 @@ Required environment variables (set in Supabase dashboard):
 - `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins
 - `XERO_CLIENT_ID` - Xero OAuth client ID
 - `XERO_CLIENT_SECRET` - Xero OAuth client secret
+
+### Email Agent Variables
+
+- `GMAIL_CLIENT_ID` - Google OAuth app client ID (for email agent)
+- `GMAIL_CLIENT_SECRET` - Google OAuth app client secret
+- `ANTHROPIC_API_KEY` - Claude API key (used for classification and drafting)
+- `TOKEN_ENCRYPTION_KEY` - AES-256 key for encrypting stored OAuth tokens
 
 ## Monitoring
 

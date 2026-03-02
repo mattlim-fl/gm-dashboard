@@ -29,6 +29,8 @@ import {
   type ThreadMessage,
 } from "../_shared/gmail.ts";
 import { classifyEmail, generateDraft } from "../_shared/claude.ts";
+import { withRetry } from "../_shared/retry.ts";
+import { sanitizeError } from "../_shared/errors.ts";
 
 // Minimal declaration for Deno global
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -132,21 +134,9 @@ async function processEmail(
   };
 
   try {
-    // Check if we've already processed this email
-    const { data: existingLog } = await supabase
-      .from("email_agent_logs")
-      .select("id, status")
-      .eq("gmail_message_id", email.id)
-      .single();
-
-    if (existingLog) {
-      console.log(`Email ${email.id} already processed (${existingLog.status})`);
-      result.status = "skipped";
-      result.error = "Already processed";
-      return result;
-    }
-
-    // Create initial log entry
+    // Atomically insert log entry - if gmail_message_id already exists, this will fail
+    // with a unique constraint violation (23505), which we catch as "already processed"
+    // This prevents race conditions where two processes check and insert simultaneously
     const { data: logEntry, error: logError } = await supabase
       .from("email_agent_logs")
       .insert({
@@ -162,7 +152,15 @@ async function processEmail(
       .select()
       .single();
 
+    // Check for unique constraint violation (email already processed)
     if (logError) {
+      if (logError.code === "23505") {
+        // Unique violation - this email was already processed
+        console.log(`Email ${email.id} already processed (duplicate detected)`);
+        result.status = "skipped";
+        result.error = "Already processed";
+        return result;
+      }
       console.error("Failed to create log entry:", logError);
       throw new Error(`Failed to create log entry: ${logError.message}`);
     }
@@ -196,19 +194,26 @@ async function processEmail(
       (c) => c.category_key === classification.category
     );
 
-    // Apply Gmail label
+    // Apply Gmail label with retry
     if (categoryConfig) {
       try {
-        const labelId = await ensureLabel(
-          accessToken,
-          categoryConfig.gmail_label_name
+        const labelId = await withRetry(
+          () => ensureLabel(accessToken, categoryConfig.gmail_label_name),
+          { maxRetries: 2, initialDelayMs: 500 }
         );
-        await modifyLabels(accessToken, email.id, [labelId]);
+        await withRetry(
+          () => modifyLabels(accessToken, email.id, [labelId]),
+          { maxRetries: 2, initialDelayMs: 500 }
+        );
         console.log(
           `Applied label ${categoryConfig.gmail_label_name} to email ${email.id}`
         );
       } catch (labelError) {
-        console.error("Failed to apply label:", labelError);
+        // Sanitize error before logging to prevent token exposure
+        const errorMsg = sanitizeError(
+          labelError instanceof Error ? labelError.message : String(labelError)
+        );
+        console.error(`Failed to apply label (continuing): ${errorMsg}`);
         // Continue processing - label failure is not critical
       }
     }
@@ -240,10 +245,15 @@ async function processEmail(
       const threadMessages = await getThread(accessToken, email.threadId);
       if (threadMessages.length > 1) {
         threadHistory = formatThreadHistory(threadMessages);
+        console.log(`Found ${threadMessages.length - 1} previous messages in thread for context`);
+      } else {
+        console.log("No previous messages in thread (this is the first message)");
       }
     } catch (threadError) {
-      console.warn("Failed to get thread history:", threadError);
-      // Continue without thread history
+      // Log the actual error to distinguish between "no history" and "fetch failed"
+      const errorMsg = threadError instanceof Error ? threadError.message : String(threadError);
+      console.warn(`Failed to fetch thread history (continuing without context): ${errorMsg}`);
+      // Continue without thread history - not critical for drafting
     }
 
     // Step 3: Build knowledge context
@@ -319,11 +329,13 @@ async function processEmail(
     console.log(`Successfully drafted reply for email ${email.id}`);
     return result;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    // Sanitize error message to prevent token/secret exposure in logs
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = sanitizeError(rawMessage);
     console.error(`Error processing email ${email.id}:`, errorMessage);
 
-    // Update log with error
-    await supabase
+    // Update log with error - verify the update succeeded
+    const { error: updateError, count } = await supabase
       .from("email_agent_logs")
       .update({
         status: "error",
@@ -331,6 +343,12 @@ async function processEmail(
         processed_at: new Date().toISOString(),
       })
       .eq("gmail_message_id", email.id);
+
+    if (updateError) {
+      console.warn(`Failed to update log entry for ${email.id}: ${updateError.message}`);
+    } else if (count === 0) {
+      console.warn(`No log entry found to update for email ${email.id}`);
+    }
 
     result.status = "error";
     result.error = errorMessage;
@@ -406,8 +424,9 @@ serve(async (req: Request) => {
       .select("title, content, category_key, is_global")
       .eq("venue", venue);
 
-    if (kfError) {
-      throw new Error(`Failed to fetch knowledge files: ${kfError.message}`);
+    if (kfError || !knowledgeFiles) {
+      console.warn(`Failed to fetch knowledge files: ${kfError?.message || "No data returned"}`);
+      // Continue with empty knowledge files - not critical
     }
 
     // Fetch unread emails
@@ -441,7 +460,7 @@ serve(async (req: Request) => {
           email,
           venue,
           categories as EmailCategory[],
-          knowledgeFiles as KnowledgeFile[]
+          (knowledgeFiles || []) as KnowledgeFile[]
         );
 
         results.push(result);

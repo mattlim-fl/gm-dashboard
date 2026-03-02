@@ -193,24 +193,52 @@ ${emailContent.body}`;
   const text = extractText(response);
 
   try {
+    // Try to extract JSON from response (may have markdown code blocks)
+    let jsonText = text.trim();
+
+    // Remove markdown code blocks if present
+    const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch) {
+      jsonText = codeBlockMatch[1].trim();
+    }
+
     // Parse the JSON response
-    const result = JSON.parse(text);
+    const result = JSON.parse(jsonText);
+
+    // Validate category is one of the expected values
+    const validCategories = [
+      "general_enquiry", "booking", "lost_and_found", "complaint",
+      "ban_appeal", "supplier", "event_enquiry", "spam", "other"
+    ];
+    const category = validCategories.includes(result.category) ? result.category : "other";
+
     return {
-      category: result.category || "other",
+      category,
       confidence: Math.min(1, Math.max(0, result.confidence || 0.5)),
       reasoning: result.reasoning || "",
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     };
-  } catch {
-    // If JSON parsing fails, try to extract category from text
-    console.error("Failed to parse classification response:", text);
-    const categoryMatch = text.match(
-      /"category":\s*"([^"]+)"/
-    );
+  } catch (parseError) {
+    // Log the full response for debugging (truncate if very long)
+    const truncatedText = text.length > 500 ? text.substring(0, 500) + "..." : text;
+    console.error("Failed to parse classification response:", {
+      error: parseError instanceof Error ? parseError.message : String(parseError),
+      response: truncatedText,
+    });
+
+    // Try to extract category from text as fallback
+    const categoryMatch = text.match(/"category":\s*"([^"]+)"/);
+    const extractedCategory = categoryMatch?.[1];
+
+    // If we couldn't extract anything useful, throw to trigger retry
+    if (!extractedCategory) {
+      throw new Error(`Classification response was not valid JSON: ${truncatedText}`);
+    }
+
     return {
-      category: categoryMatch?.[1] || "other",
+      category: extractedCategory,
       confidence: 0.5,
-      reasoning: "Failed to parse full response",
+      reasoning: "Parsed from malformed response",
       tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
     };
   }

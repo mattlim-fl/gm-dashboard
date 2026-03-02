@@ -199,10 +199,70 @@ export function logError(
 ): void {
   const errorInfo = {
     context,
-    error: error instanceof Error ? error.message : String(error),
+    error: error instanceof Error ? sanitizeError(error.message) : sanitizeError(String(error)),
     stack: error instanceof Error ? error.stack : undefined,
     ...extra,
   }
 
   console.error(JSON.stringify(errorInfo))
+}
+
+/**
+ * Patterns that may contain sensitive data in error messages
+ */
+const SENSITIVE_PATTERNS = [
+  // OAuth tokens and API keys
+  /access_token[=:]["']?[a-zA-Z0-9_\-\.]+["']?/gi,
+  /refresh_token[=:]["']?[a-zA-Z0-9_\-\.]+["']?/gi,
+  /api[_-]?key[=:]["']?[a-zA-Z0-9_\-\.]+["']?/gi,
+  /bearer\s+[a-zA-Z0-9_\-\.]+/gi,
+  /authorization[=:]\s*["']?Bearer\s+[a-zA-Z0-9_\-\.]+["']?/gi,
+
+  // Common secret patterns
+  /client[_-]?secret[=:]["']?[a-zA-Z0-9_\-\.]+["']?/gi,
+  /password[=:]["']?[^\s"'&]+["']?/gi,
+  /secret[=:]["']?[a-zA-Z0-9_\-\.]+["']?/gi,
+
+  // Specific provider patterns
+  /sk-[a-zA-Z0-9]{20,}/g, // Anthropic/OpenAI API keys
+  /ya29\.[a-zA-Z0-9_\-]+/g, // Google access tokens
+  /1\/\/[a-zA-Z0-9_\-]+/g, // Google refresh tokens
+
+  // Encrypted tokens (base64-like strings that might be our encrypted data)
+  /encrypted[=:]["']?[a-zA-Z0-9+\/=]{50,}["']?/gi,
+]
+
+/**
+ * Sanitize an error message by removing potentially sensitive data
+ * Use this before logging errors to prevent token/secret exposure
+ */
+export function sanitizeError(message: string): string {
+  let sanitized = message
+
+  for (const pattern of SENSITIVE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, (match) => {
+      // Extract the key part (before = or :) if present
+      const keyMatch = match.match(/^([a-zA-Z_\-]+)[=:]/)
+      if (keyMatch) {
+        return `${keyMatch[1]}=[REDACTED]`
+      }
+      // For bearer tokens
+      if (match.toLowerCase().startsWith('bearer')) {
+        return 'Bearer [REDACTED]'
+      }
+      return '[REDACTED]'
+    })
+  }
+
+  return sanitized
+}
+
+/**
+ * Create a safe error for logging that has sensitive data removed
+ */
+export function safeError(error: unknown): string {
+  if (error instanceof Error) {
+    return sanitizeError(error.message)
+  }
+  return sanitizeError(String(error))
 }

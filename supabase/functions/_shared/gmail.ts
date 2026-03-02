@@ -119,6 +119,20 @@ export async function decryptRefreshToken(encrypted: string): Promise<string> {
 }
 
 /**
+ * Error class for Gmail authentication failures
+ * Used to distinguish auth errors that require user re-authorization
+ */
+export class GmailAuthError extends Error {
+  constructor(
+    message: string,
+    public readonly requiresReconnect: boolean = false
+  ) {
+    super(message);
+    this.name = "GmailAuthError";
+  }
+}
+
+/**
  * Refresh an access token using a refresh token
  */
 export async function refreshAccessToken(
@@ -141,21 +155,59 @@ export async function refreshAccessToken(
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Token refresh failed (${response.status}): ${error}`);
+    const data = await response.json();
+
+    // Check for specific OAuth errors that require re-authorization
+    if (data.error) {
+      const errorCode = data.error;
+      const errorDesc = data.error_description || "";
+
+      // These errors mean the refresh token is no longer valid
+      if (
+        errorCode === "invalid_grant" ||
+        errorCode === "invalid_token" ||
+        errorDesc.includes("Token has been expired or revoked") ||
+        errorDesc.includes("Token has been revoked")
+      ) {
+        throw new GmailAuthError(
+          `Gmail authorization expired or revoked. User needs to reconnect Gmail. (${errorCode}: ${errorDesc})`,
+          true
+        );
+      }
+
+      throw new Error(`Token refresh failed: ${errorCode} - ${errorDesc}`);
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Token refresh failed (${response.status})`);
+    }
+
+    // Verify we actually got an access token
+    if (!data.access_token) {
+      throw new GmailAuthError(
+        "Token refresh returned no access token. User may need to reconnect Gmail.",
+        true
+      );
+    }
+
     return {
       accessToken: data.access_token,
       expiresIn: data.expires_in || 3600,
     };
   };
 
+  // Don't retry auth errors - they won't succeed on retry
   return withRetry(makeRequest, {
     maxRetries: 2,
     initialDelayMs: 500,
+    isRetryable: (error) => {
+      // Don't retry if it's an auth error requiring reconnect
+      if (error instanceof GmailAuthError && error.requiresReconnect) {
+        return false;
+      }
+      // For other errors, use default retry logic (check for retryable status codes)
+      return true;
+    },
     ...retryOptions,
   });
 }

@@ -68,6 +68,23 @@ serve(async (req: Request) => {
   // Build the redirect URI (callback endpoint)
   const redirectUri = `${SUPABASE_URL}/functions/v1/email-agent-oauth/callback`;
 
+  // Helper function to get valid venues from database
+  async function getValidVenues(): Promise<string[]> {
+    const { data: venues } = await supabase
+      .from("email_agent_config")
+      .select("venue");
+    return venues?.map((v) => v.venue) || [];
+  }
+
+  // Helper function to validate venue parameter
+  async function isValidVenue(venue: string | null): Promise<boolean> {
+    if (!venue) return false;
+    const validVenues = await getValidVenues();
+    // Also allow new venues not yet in the table (they'll be created on /start)
+    // For existing venues, check the config table
+    return validVenues.length === 0 || validVenues.includes(venue);
+  }
+
   try {
     // =====================================================
     // GET /start - Initiate OAuth flow
@@ -75,7 +92,8 @@ serve(async (req: Request) => {
     if (path === "start" && req.method === "GET") {
       const venue = url.searchParams.get("venue");
 
-      if (!venue || !["hippie", "manor"].includes(venue)) {
+      // Validate venue - must be provided and alphanumeric
+      if (!venue || !/^[a-z0-9_-]+$/i.test(venue)) {
         return json({ error: "Invalid or missing venue parameter" }, 400);
       }
 
@@ -140,12 +158,13 @@ serve(async (req: Request) => {
       let venue: string;
       try {
         const stateData = JSON.parse(atob(state));
-        venue = stateData.venue;
+        venue = stateData?.venue;
       } catch {
         return json({ error: "Invalid state parameter" }, 400);
       }
 
-      if (!venue || !["hippie", "manor"].includes(venue)) {
+      // Validate venue from state
+      if (!venue || !/^[a-z0-9_-]+$/i.test(venue)) {
         return json({ error: "Invalid venue in state" }, 400);
       }
 
@@ -189,7 +208,9 @@ serve(async (req: Request) => {
       const body = await req.json().catch(() => ({}));
       const venue = body.venue as string;
 
-      if (!venue || !["hippie", "manor"].includes(venue)) {
+      // Validate venue exists in config
+      const validVenues = await getValidVenues();
+      if (!venue || !validVenues.includes(venue)) {
         return json({ error: "Invalid or missing venue" }, 400);
       }
 
@@ -221,7 +242,9 @@ serve(async (req: Request) => {
       const body = await req.json().catch(() => ({}));
       const venue = body.venue as string;
 
-      if (!venue || !["hippie", "manor"].includes(venue)) {
+      // Validate venue exists in config
+      const validVenues = await getValidVenues();
+      if (!venue || !validVenues.includes(venue)) {
         return json({ error: "Invalid or missing venue" }, 400);
       }
 
