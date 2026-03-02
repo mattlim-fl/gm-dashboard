@@ -220,10 +220,11 @@ The booking widget files are located in `public/widget/` and are served as stati
 
 - **Development Guidelines**: See `.cursor/rules/gm-dashboard.mdc`
 - **Product Requirements**: See `docs/product/prd/main-product-prd.md`
-- **API Documentation**: See `docs/api-documentation.md`
+- **API Runbook (Netlify API)**: See `docs/api-runbook.md`
+- **Edge Functions Catalog**: See `docs/edge-functions.md`
 - **Architecture**: See `docs/technical/architecture-overview.md`
 - **RLS Policies**: See `docs/RLS_POLICIES.md`
-- **Refactor History**: See `REFACTOR_SUMMARY.md`
+- **Notifications Implementation Notes**: See `IMPLEMENTATION_SUMMARY.md`
 
 ## Contributing
 

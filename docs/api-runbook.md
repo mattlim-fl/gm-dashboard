@@ -4,6 +4,10 @@ Base URL (Netlify Functions): `/.netlify/functions/api`
 
 All routes require `Authorization: Bearer <user_jwt>` unless stated.
 
+## How requests flow
+
+- Frontend calls these endpoints using `VITE_API_BASE_URL` (typically `/.netlify/functions/api`).\n+- Netlify entrypoint: `netlify/functions/api.ts`\n+- Router implementation: `apps/api/src/app.ts`\n+- Some routes are thin proxies to Supabase Edge Functions (see `docs/edge-functions.md`).
+
 ## Routes
 
 - GET `/health`

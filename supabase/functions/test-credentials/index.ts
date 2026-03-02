@@ -34,6 +34,32 @@ function json(body: unknown, status = 200) {
   });
 }
 
+async function requireAdmin(req: Request, supabase: any) {
+  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
+  if (!authHeader.toLowerCase().startsWith("bearer ")) {
+    return { ok: false as const, response: json({ success: false, error: "Unauthorized" }, 401) };
+  }
+
+  const token = authHeader.slice(7).trim();
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+  const email = userData?.user?.email;
+  if (userErr || !email) {
+    return { ok: false as const, response: json({ success: false, error: "Unauthorized" }, 401) };
+  }
+
+  const { data: allowed, error: allowedErr } = await supabase
+    .from("allowed_emails")
+    .select("role")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (allowedErr || allowed?.role !== "admin") {
+    return { ok: false as const, response: json({ success: false, error: "Forbidden" }, 403) };
+  }
+
+  return { ok: true as const };
+}
+
 async function testSquare(accessToken: string, locationId: string): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const res = await fetch(
@@ -163,6 +189,9 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const adminCheck = await requireAdmin(req, supabase);
+    if (!adminCheck.ok) return adminCheck.response;
 
     const body = await req.json();
     const { venue, integrationType } = body;

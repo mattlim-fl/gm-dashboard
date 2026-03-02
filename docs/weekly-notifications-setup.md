@@ -1,70 +1,58 @@
-# Weekly Notification System
+# Weekly Notifications (Trade Report + Business Performance)
 
-Automated weekly performance summaries sent every Wednesday at 6:00 AM AWST via WhatsApp (short metrics) and Email (AI-generated analysis).
+The weekly notification system currently consists of **two separate reports**:
 
-## Setup
+1. **Trade Report** (typically Sunday morning, AWST) – sales/revenue/attendance highlights\n+2. **Business Performance** (typically Wednesday morning, AWST) – P&L KPIs and cost percentages
 
-### 1. Database
+Both can send **Email** (long-form analysis) and **WhatsApp** (short summary), and schedules are configurable in the app UI.
 
-```bash
-supabase db push  # Applies migration: 20250107000000-create-notification-tables.sql
-```
+## What changed vs legacy docs
 
-### 2. Environment Variables
+- The old `weekly-summary` function is **deprecated**.\n+- Use **`trade-report`** and **`business-performance`** edge functions.\n+- Scheduling is **configurable** via **`update-cron-schedule`** (no manual `cron.schedule(...)` copy/paste required for normal operation).
 
-Add to Supabase Dashboard → Project Settings → Edge Functions → Secrets:
+## Setup / Deployment
 
-```bash
-OPENAI_API_KEY=sk-...              # OpenAI (GPT-4 access required)
-WHATSAPP_BUSINESS_API_KEY=...      # Meta for Developers → WhatsApp
-WHATSAPP_PHONE_NUMBER_ID=...       # WhatsApp Business phone number ID
-```
+### 1) Database
 
-### 3. Deploy
+Apply migrations:
 
 ```bash
-supabase functions deploy weekly-summary
+supabase db push
 ```
 
-### 4. Schedule Cron Job
+Key migrations for the dual-report system:\n+- `20250114000001_add_business_performance_notification.sql`\n+- `20250114000002_add_cron_management.sql`
 
-In Supabase SQL Editor:
+### 2) Deploy edge functions
 
-```sql
-SELECT cron.schedule(
-  'weekly-summary-notification',
-  '0 22 * * 2',  -- Tuesday 10 PM UTC = Wednesday 6 AM AWST
-  $$
-  SELECT net.http_post(
-    url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/weekly-summary',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer YOUR_ANON_KEY"}'::jsonb,
-    body:='{}'::jsonb
-  );
-  $$
-);
+```bash
+supabase functions deploy trade-report
+supabase functions deploy business-performance
+supabase functions deploy update-cron-schedule
 ```
 
-### 5. Configure & Test
+### 3) Configure in UI
 
-1. Settings → Notifications tab
-2. Add emails and WhatsApp numbers (+61412345678 format)
-3. Enable notifications
-4. Click "Send Test Notification"
+In the dashboard:\n+- Go to **Settings → Notifications**\n+- Configure recipients (email + WhatsApp)\n+- Enable each report\n+- Optionally adjust schedule (day/time in AWST)\n+- Use **Preview** and **Test** actions to validate content and delivery
 
 ## Monitoring
 
-```sql
--- Recent notifications
-SELECT * FROM notification_logs ORDER BY sent_at DESC LIMIT 10;
+Useful checks:
 
--- Cron job status
-SELECT * FROM cron.job WHERE jobname = 'weekly-summary-notification';
+```sql
+-- Recent notification logs
+SELECT * FROM notification_logs ORDER BY sent_at DESC LIMIT 20;
+
+-- Cron jobs (names may vary by environment)
+SELECT jobname, schedule, active
+FROM cron.job
+ORDER BY jobname;
 ```
 
 ## Troubleshooting
 
-- Check `notification_logs` table for errors
-- Verify env variables in Supabase Dashboard
-- Check Edge Function logs
-- Test with "Send Test Notification" button
+- **Nothing sends**: confirm notification is enabled in `notification_settings` and cron job is active.\n+- **Preview works but cron doesn’t**: check `cron.job` entries and function logs.\n+- **Delivery failures**: inspect `notification_logs` error fields and edge function logs.
+
+## References
+
+- Implementation notes: `IMPLEMENTATION_SUMMARY.md`\n+- Edge functions catalog: `docs/edge-functions.md`
 

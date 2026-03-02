@@ -27,6 +27,32 @@ function json(body: unknown, status = 200) {
   });
 }
 
+async function requireAdmin(req: Request, supabase: any) {
+  const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
+  if (!authHeader.toLowerCase().startsWith("bearer ")) {
+    return { ok: false as const, response: json({ success: false, error: "Unauthorized" }, 401) };
+  }
+
+  const token = authHeader.slice(7).trim();
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+  const email = userData?.user?.email;
+  if (userErr || !email) {
+    return { ok: false as const, response: json({ success: false, error: "Unauthorized" }, 401) };
+  }
+
+  const { data: allowed, error: allowedErr } = await supabase
+    .from("allowed_emails")
+    .select("role")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (allowedErr || allowed?.role !== "admin") {
+    return { ok: false as const, response: json({ success: false, error: "Forbidden" }, 403) };
+  }
+
+  return { ok: true as const, userId: userData.user.id as string };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -45,6 +71,9 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const adminCheck = await requireAdmin(req, supabase);
+    if (!adminCheck.ok) return adminCheck.response;
 
     const body = await req.json();
     const { venue, integrationType, credentials } = body;
@@ -77,21 +106,12 @@ serve(async (req: Request) => {
       }
     }
 
-    // Get user ID from auth header if available
-    let userId: string | undefined;
-    const authHeader = req.headers.get("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      const { data: userData } = await supabase.auth.getUser(token);
-      userId = userData?.user?.id;
-    }
-
     const result = await saveCredentials(
       supabase,
       venue || null,
       integrationType as IntegrationType,
       credentials,
-      userId
+      adminCheck.userId
     );
 
     if (!result.success) {

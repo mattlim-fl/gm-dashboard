@@ -20,6 +20,6 @@ This directory contains all Product Requirements Documents for the application.
 
 | Document | Status | Owner | Last Updated |
 |----------|--------|-------|--------------|
-| Main Product PRD | Draft | TBD | TBD |
+| Main Product PRD | Draft | GM Dashboard Team | 2026-02-18 |
 
 Status Options: Draft, Review, Approved, Implemented, Archived

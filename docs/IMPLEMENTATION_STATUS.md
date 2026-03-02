@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Last Updated:** January 6, 2025
+**Last Updated:** February 18, 2026
 
 ## Completed Features ✅
 
@@ -26,6 +26,20 @@
 - Revenue analytics page
 - Xero P&L integration
 - **Docs:** `technical/architecture-overview.md`
+
+### Notifications
+- Weekly Trade Report (Sunday) + Business Performance report (Wednesday)
+- Configurable schedule via UI
+- **Docs:** `IMPLEMENTATION_SUMMARY.md`, `weekly-notifications-setup.md` (to be refreshed)
+
+### API Credential Management
+- Encrypted credentials stored in `venue_api_credentials` with per-venue / per-org / global scoping
+- Settings UI for Square / Gmail / Xero / Resend credentials + connectivity testing
+- **Docs:** `RLS_POLICIES.md`
+
+### Email Agent
+- Gmail OAuth + scheduled processing functions for automated inbox triage
+- Venue-specific inbox support
 
 ### Multi-Venue
 - Manor and Hippie Club fully integrated
@@ -78,8 +92,9 @@ These documented APIs don't exist (use edge functions instead):
 ## Technical Debt
 
 ### Testing
-- ❌ No automated tests (unit, integration, E2E)
-- **Plan:** Add tests for business logic and edge functions
+- ⚠️ No frontend automated tests (unit, integration, E2E)
+- ✅ Edge Function shared utilities have Deno tests in `supabase/functions/_shared/__tests__/`
+- **Plan:** Add frontend tests for critical flows + minimal E2E smoke tests
 
 ### Performance
 - ⚠️ Large booking lists need pagination

@@ -9,7 +9,8 @@
 
 **Building features?**
 1. `docs/IMPLEMENTATION_STATUS.md` - What's done/planned
-2. `docs/edge-functions.md` - API reference
+2. `docs/api-runbook.md` - Runtime API surface (Netlify Functions)
+3. `docs/edge-functions.md` - Supabase Edge Functions catalog
 3. `docs/features/` - Feature-specific docs
 
 ## Essential Documentation
@@ -17,7 +18,8 @@
 ### Core Technical
 - **`.cursor/rules/gm-dashboard.mdc`** ⭐ - AI coding guidelines, conventions, patterns
 - **`technical/architecture-overview.md`** ⭐ - Complete system architecture, DB schema, data flows
-- **`edge-functions.md`** ⭐ - All edge function APIs with examples
+- **`api-runbook.md`** ⭐ - Netlify API operations guide (frontend runtime endpoints)
+- **`edge-functions.md`** ⭐ - Supabase Edge Functions catalog (integration reference)
 - **`RLS_POLICIES.md`** ⭐ - Database security policies
 
 ### Features
@@ -29,6 +31,7 @@
 - **`product/prd/main-product-prd.md`** - Product requirements
 - **`IMPLEMENTATION_STATUS.md`** - Feature status and roadmap
 - **`ROADMAP.md`** - GM Dashboard development roadmap
+- **`weekly-notifications-setup.md`** - Trade Report + Business Performance setup/runbook
 
 ## Directory Structure
 
