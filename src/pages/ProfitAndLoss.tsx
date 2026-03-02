@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import {
   useQueries,
   type UseQueryResult,
@@ -109,10 +109,10 @@ function calculateChangePercent(current: number, comparison: number): number {
 }
 
 export default function ProfitAndLoss() {
-  const [comparisonType, setComparisonType] = React.useState<ComparisonType>('previous');
+  const [comparisonType, setComparisonType] = useState<ComparisonType>('previous');
 
   // Fixed periods: 7, 28, 365 days
-  const periods = React.useMemo(() => {
+  const periods = useMemo(() => {
     return {
       weekly: getComparisonPeriods(7, comparisonType),
       monthly: getComparisonPeriods(28, comparisonType),
@@ -199,7 +199,7 @@ export default function ProfitAndLoss() {
 
   // Helper to render a metric within a card
   const renderMetric = (
-    icon: React.ReactNode,
+    icon: ReactNode,
     label: string,
     value: number,
     comparisonValue: number | undefined,

@@ -1,10 +1,16 @@
 // Karaoke Booth Types
 // These types will be merged with the main database types once the migration is applied
 
+import type { Venue, VenueSelection } from './venue';
+
+/** Karaoke is only available at manor and hippie venues */
+export type KaraokeVenue = Exclude<Venue, 'daisy'>;
+export type KaraokeVenueSelection = KaraokeVenue | 'all';
+
 export interface KaraokeBoothRow {
   id: string;
   name: string;
-  venue: 'manor' | 'hippie';
+  venue: KaraokeVenue;
   capacity: number;
   hourly_rate: number;
   is_available: boolean;
@@ -19,7 +25,7 @@ export interface KaraokeBoothRow {
 export interface KaraokeBoothInsert {
   id?: string;
   name: string;
-  venue: 'manor' | 'hippie';
+  venue: KaraokeVenue;
   capacity?: number;
   hourly_rate?: number;
   is_available?: boolean;
@@ -34,7 +40,7 @@ export interface KaraokeBoothInsert {
 export interface KaraokeBoothUpdate {
   id?: string;
   name?: string;
-  venue?: 'manor' | 'hippie';
+  venue?: KaraokeVenue;
   capacity?: number;
   hourly_rate?: number;
   is_available?: boolean;
@@ -53,7 +59,7 @@ export interface KaraokeBookingRow {
   customer_email: string | null;
   customer_phone: string | null;
   booking_type: 'karaoke_booking';
-  venue: 'manor' | 'hippie';
+  venue: KaraokeVenue;
   venue_area: string | null;
   karaoke_booth_id: string; // NEW: Reference to karaoke booth
   booking_date: string;
@@ -80,7 +86,7 @@ export interface KaraokeBookingInsert {
   customer_email?: string | null;
   customer_phone?: string | null;
   booking_type: 'karaoke_booking';
-  venue: 'manor' | 'hippie';
+  venue: KaraokeVenue;
   venue_area?: string | null;
   karaoke_booth_id: string;
   booking_date: string;
@@ -121,7 +127,7 @@ export interface KaraokeBookingFormData {
   customer_name: string;
   customer_email?: string;
   customer_phone?: string;
-  venue: 'manor' | 'hippie';
+  venue: KaraokeVenue;
   booth_id: string;
   booking_date: string;
   start_time: string;
@@ -170,7 +176,7 @@ export interface BookingConflictResult {
 
 // Filter types
 export interface KaraokeBookingFilters {
-  venue?: 'manor' | 'hippie' | 'all';
+  venue?: KaraokeVenueSelection;
   booth_id?: string;
   status?: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'all';
   date_from?: string;
@@ -179,7 +185,7 @@ export interface KaraokeBookingFilters {
 }
 
 export interface KaraokeBoothFilters {
-  venue?: 'manor' | 'hippie' | 'all';
+  venue?: KaraokeVenueSelection;
   is_available?: boolean;
   is_archived?: boolean;
   search?: string;
@@ -187,7 +193,6 @@ export interface KaraokeBoothFilters {
 
 // Utility types
 export type KaraokeBookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
-export type KaraokeVenue = 'manor' | 'hippie';
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'paid' | 'refunded'; 
 
 // Holds and availability

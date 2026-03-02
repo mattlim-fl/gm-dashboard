@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { isAdmin } from '@/lib/permissions';
@@ -22,7 +22,7 @@ const VenueContext = createContext<VenueContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'gm-dashboard-selected-venue';
 
-export function VenueProvider({ children }: { children: React.ReactNode }) {
+export function VenueProvider({ children }: { children: ReactNode }) {
   const { user, role } = useAuth();
   const [accessibleVenues, setAccessibleVenues] = useState<Venue[]>([]);
   const [selectedVenue, setSelectedVenueState] = useState<VenueSelection>('all');

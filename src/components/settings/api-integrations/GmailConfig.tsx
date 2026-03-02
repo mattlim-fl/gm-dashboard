@@ -1,10 +1,11 @@
-import React from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useVenueCredentials } from '@/hooks/useVenueCredentials';
 import { supabase } from '@/integrations/supabase/client';
+import { config } from '@/config/env';
 import {
   Loader2,
   Mail,
@@ -22,11 +23,10 @@ export function GmailConfig({ venue }: GmailConfigProps) {
   const { status, loading, testing, testConnection, refresh } =
     useVenueCredentials(venue, 'gmail');
   const { toast } = useToast();
-  const [disconnecting, setDisconnecting] = React.useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const handleConnect = () => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const oauthUrl = `${supabaseUrl}/functions/v1/email-agent-oauth/start?venue=${venue}`;
+    const oauthUrl = `${config.supabaseUrl}/functions/v1/email-agent-oauth/start?venue=${venue}`;
     window.location.href = oauthUrl;
   };
 

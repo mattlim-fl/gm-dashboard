@@ -1,10 +1,10 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAdmin } from '@/lib/permissions';
 
 interface AdminRouteProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function AdminRoute({ children }: AdminRouteProps) {

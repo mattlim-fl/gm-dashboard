@@ -1,5 +1,4 @@
-
-import React from "react";
+import type { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "./AppSidebar";
@@ -17,8 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface DashboardLayoutProps {
-  children: React.ReactNode;
-  headerActions?: React.ReactNode;
+  children: ReactNode;
+  headerActions?: ReactNode;
 }
 
 export function DashboardLayout({ children, headerActions }: DashboardLayoutProps) {

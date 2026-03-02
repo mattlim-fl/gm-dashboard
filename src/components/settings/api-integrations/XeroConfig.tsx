@@ -1,10 +1,11 @@
-import React from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useVenueCredentials, useOrganizations } from '@/hooks/useVenueCredentials';
 import { supabase } from '@/integrations/supabase/client';
+import { config } from '@/config/env';
 import {
   Loader2,
   FileSpreadsheet,
@@ -24,13 +25,12 @@ export function XeroConfig({ venue }: XeroConfigProps) {
     useVenueCredentials(venue, 'xero');
   const { getOrganizationForVenue, loading: orgLoading } = useOrganizations();
   const { toast } = useToast();
-  const [disconnecting, setDisconnecting] = React.useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const organization = getOrganizationForVenue(venue);
 
   const handleConnect = () => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const oauthUrl = `${supabaseUrl}/functions/v1/xero-oauth/start?venue=${venue}`;
+    const oauthUrl = `${config.supabaseUrl}/functions/v1/xero-oauth/start?venue=${venue}`;
     window.location.href = oauthUrl;
   };
 

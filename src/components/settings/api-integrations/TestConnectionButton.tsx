@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 
@@ -15,7 +15,7 @@ export function TestConnectionButton({
   testing,
   lastStatus,
 }: TestConnectionButtonProps) {
-  const [result, setResult] = React.useState<{
+  const [result, setResult] = useState<{
     success: boolean;
     message?: string;
   } | null>(null);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -22,6 +22,7 @@ import {
   Activity
 } from 'lucide-react';
 import { KnowledgeFileEditor } from './KnowledgeFileEditor';
+import { config as appConfig } from '@/config/env';
 
 interface EmailAgentConfig {
   id: string;
@@ -230,9 +231,7 @@ export function EmailAgentSettings() {
   }
 
   async function connectGmail() {
-    // Get the Supabase URL from environment
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const oauthUrl = `${supabaseUrl}/functions/v1/email-agent-oauth/start?venue=${venue}`;
+    const oauthUrl = `${appConfig.supabaseUrl}/functions/v1/email-agent-oauth/start?venue=${venue}`;
     window.location.href = oauthUrl;
   }
 
