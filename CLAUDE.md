@@ -1,5 +1,36 @@
 # Claude Code Instructions
 
+## Quick Reference
+
+### Before Writing Code
+1. Check existing patterns in similar files
+2. Use services from `src/services/`, not direct Supabase calls
+3. Use hooks from `src/hooks/`, not raw React Query
+4. Check `src/types/` and `src/schemas/` for existing types
+
+### Key Files to Know
+| Purpose | Location |
+|---------|----------|
+| Types | `src/types/{domain}.ts` |
+| Services | `src/services/{domain}Service.ts` |
+| Hooks | `src/hooks/use{Domain}.ts` |
+| Schemas | `src/schemas/{domain}Schemas.ts` |
+| Constants | `src/constants/{domain}Constants.ts` |
+| Edge functions | `supabase/functions/{name}/index.ts` |
+| Shared utils | `supabase/functions/_shared/*.ts` |
+| Frontend utils | `src/utils/`, `src/lib/` |
+
+### Common Commands
+```bash
+npm run dev              # Start dev server
+npm run build            # Build for production
+deno task test           # Run edge function tests (from supabase/functions/)
+npx supabase functions deploy <name>  # Deploy edge function
+npx supabase db push     # Apply database migrations
+```
+
+---
+
 ## MCP Integrations
 
 ### Supabase MCP
@@ -193,6 +224,229 @@ For OAuth flows to work, these must be set in Supabase Edge Function secrets:
 | `XERO_CLIENT_SECRET` | Xero OAuth app client secret |
 
 Existing env vars (`SQUARE_ACCESS_TOKEN`, `RESEND_API_KEY`, etc.) continue to work as fallbacks.
+
+---
+
+## Error Handling Patterns
+
+### Frontend Errors
+Use the centralized error handler from `src/utils/errorHandling.ts`:
+```typescript
+import { handleError, handleErrorSilently, isNetworkError } from '@/utils/errorHandling'
+
+// Standard error handling (shows toast + logs)
+try {
+  await bookingService.create(data)
+} catch (error) {
+  handleError(error, { operation: 'creating booking', component: 'BookingForm' })
+}
+
+// Silent error handling (logs only in development)
+try {
+  await analytics.track(event)
+} catch (error) {
+  handleErrorSilently(error, { operation: 'analytics tracking' })
+}
+```
+
+### Edge Function Errors
+Use standardized error classes from `_shared/errors.ts`:
+```typescript
+import { ValidationError, PaymentError, AuthError, errorResponse } from "../_shared/errors.ts"
+
+// Throw typed errors
+throw new ValidationError('Invalid booking date', 'booking_date')
+throw new PaymentError('Square charge failed', paymentId, 500)
+throw new AuthError()  // defaults to 'Unauthorized'
+
+// Return consistent error responses (uses getStatusCode automatically)
+return errorResponse(error, corsHeaders)
+```
+
+**Error classes available:**
+- `ValidationError` - 400, for invalid input
+- `AuthError` - 401, for authentication failures
+- `NotFoundError` - 404, for missing resources
+- `PaymentError` - 500, for payment processing failures
+- `BookingError` - 500, for booking creation/update failures
+- `ConfigError` - 500, for missing configuration
+
+---
+
+## Form Validation with Zod
+
+Schemas are in `src/schemas/`. Follow these patterns:
+
+### Base Schema with Extensions
+```typescript
+// src/schemas/bookingSchemas.ts
+export const baseBookingSchema = z.object({
+  customerName: z.string().min(2, "Customer name must be at least 2 characters"),
+  customerEmail: z.string().email("Please enter a valid email").optional().or(z.literal("")),
+  venue: z.enum(["manor", "hippie"], { required_error: "Please select a venue" }),
+  bookingDate: z.string().min(1, "Please select a date"),
+})
+
+// Extended for specific forms
+export const createBookingSchema = baseBookingSchema.extend({
+  guestCount: z.string().min(1, "Required"),
+})
+```
+
+### Cross-Field Validation with Refine
+```typescript
+export const createBookingSchema = baseBookingSchema
+  .refine((data) => {
+    // At least one contact method required
+    return data.customerEmail || data.customerPhone
+  }, {
+    message: "Please provide either email or phone number",
+    path: ["customerEmail"],  // Shows error on this field
+  })
+  .refine((data) => {
+    // Conditional validation based on booking type
+    if (data.bookingType === "venue_hire" && !data.venueArea) {
+      return false
+    }
+    return true
+  }, {
+    message: "Please select a venue area for venue hire bookings",
+    path: ["venueArea"],
+  })
+
+// Export inferred types
+export type CreateBookingFormValues = z.infer<typeof createBookingSchema>
+```
+
+### Using with React Hook Form
+```tsx
+import { zodResolver } from "@hookform/resolvers/zod"
+import { createBookingSchema, type CreateBookingFormValues } from "@/schemas/bookingSchemas"
+
+const form = useForm<CreateBookingFormValues>({
+  resolver: zodResolver(createBookingSchema),
+  defaultValues: { venue: "manor", bookingDate: "" },
+})
+```
+
+---
+
+## React Query Cache Strategy
+
+### Query Key Conventions
+```typescript
+// List queries include filters
+['bookings', { venue, date, status }]
+['customers', { venue, search }]
+
+// Detail queries use ID
+['booking', bookingId]
+['customer', customerId]
+```
+
+### Invalidation Rules
+- Creating/updating booking → invalidate `['bookings']` AND `['booking', id]`
+- Updating customer → invalidate `['customer', id]` AND `['customers']`
+- Always invalidate parent list when mutating children
+
+### Standard Mutation Pattern
+```typescript
+// src/hooks/useBookings.ts
+export const useUpdateBooking = () => {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+
+  return useMutation({
+    mutationFn: ({ id, data }) => bookingService.updateBooking(id, data),
+    onSuccess: (booking) => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      queryClient.invalidateQueries({ queryKey: ['booking', booking.id] })
+      toast({ title: "Booking Updated" })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error Updating Booking",
+        description: error.message,
+        variant: "destructive",
+      })
+    },
+  })
+}
+```
+
+---
+
+## Testing
+
+### Edge Functions (Deno)
+Tests exist in `supabase/functions/_shared/__tests__/`:
+```bash
+# From supabase/functions/ directory
+deno task test           # Run all tests
+deno task test:crypto    # crypto.test.ts
+deno task test:retry     # retry.test.ts
+deno task test:square    # square.test.ts
+deno task test:claude    # claude.test.ts
+deno task test:gmail     # gmail.test.ts
+```
+
+### Frontend
+**No frontend tests exist.** If adding tests in future:
+- Location: `src/{feature}/__tests__/{Component}.test.tsx`
+- Priority: Business-critical paths (booking creation, payments, revenue calculations)
+
+---
+
+## Coding Practices (Avoiding Bloat)
+
+### File Size Limits
+- **Components:** Max ~300 lines. Split if larger.
+- **Services:** Max ~200 lines per service file.
+- **Pages:** If > 200 lines, extract sub-components.
+
+### When to Split
+- Component has > 3 distinct responsibilities
+- Multiple large return blocks with conditional rendering
+- Reusable logic that could benefit other components
+
+### Anti-Patterns to Avoid
+- **God components:** One component doing everything. Split by responsibility.
+- **Inline types:** Define in `src/types/`, not in component files.
+- **Inline validation:** Use `src/schemas/`, not ad-hoc validation.
+- **Copy-paste code:** Extract to utilities or shared components.
+- **Premature abstraction:** Don't create utilities for one-off logic.
+- **Feature creep:** Implement only what's requested.
+
+### Splitting Pattern
+```
+// Before: BookingForm.tsx (400 lines)
+// After:
+BookingForm.tsx           # Main form orchestration (~100 lines)
+├── BookingFormFields.tsx # Form fields section (~100 lines)
+├── BookingFormSummary.tsx # Summary/preview section (~80 lines)
+└── useBookingForm.ts     # Form logic hook (~100 lines)
+```
+
+---
+
+## Agent Development Workflow
+
+### Before Making Changes
+1. Read existing implementation of similar features
+2. Check for reusable utilities in `src/utils/`, `src/lib/`, `_shared/`
+3. Verify naming conventions match existing code
+4. Check if types/schemas already exist
+
+### Code Review Checklist (Self-Check)
+- [ ] Using existing service pattern, not raw Supabase calls
+- [ ] Using existing hooks, not raw React Query
+- [ ] Types defined in `src/types/`, not inline
+- [ ] Validation in `src/schemas/`, not component
+- [ ] Error handling uses `handleError()` utility
+- [ ] Query invalidation matches existing patterns
+- [ ] No duplicate systems (see global CLAUDE.md)
+
+---
 
 ## UI Patterns
 
