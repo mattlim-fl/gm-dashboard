@@ -1,19 +1,42 @@
 // Quick utility to list Square catalog items and their variation IDs
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { getSquareCredentials } from "../_shared/credentials.ts"
 
 declare const Deno: any
 
 serve(async (req: Request) => {
-  const SQUARE_ACCESS_TOKEN = Deno.env.get('SQUARE_ACCESS_TOKEN')
+  // Parse venue from query string or body
+  const url = new URL(req.url)
+  let venue = url.searchParams.get('venue') || 'manor'
 
-  if (!SQUARE_ACCESS_TOKEN) {
-    return new Response(JSON.stringify({ error: 'No access token' }), { status: 500 })
+  if (req.method === 'POST') {
+    try {
+      const body = await req.json()
+      if (body.venue) venue = body.venue
+    } catch {}
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), { status: 500 })
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+  // Get Square credentials for the venue's organization
+  const creds = await getSquareCredentials(supabase, venue)
+
+  if (!creds?.accessToken) {
+    return new Response(JSON.stringify({ error: 'No Square access token found' }), { status: 500 })
   }
 
   const res = await fetch('https://connect.squareup.com/v2/catalog/list?types=ITEM', {
     headers: {
       'Square-Version': '2023-10-18',
-      'Authorization': `Bearer ${SQUARE_ACCESS_TOKEN}`,
+      'Authorization': `Bearer ${creds.accessToken}`,
       'Content-Type': 'application/json'
     }
   })
@@ -31,7 +54,7 @@ serve(async (req: Request) => {
     }))
   }))
 
-  return new Response(JSON.stringify({ items }, null, 2), {
+  return new Response(JSON.stringify({ items, venue }, null, 2), {
     headers: { 'Content-Type': 'application/json' }
   })
 })

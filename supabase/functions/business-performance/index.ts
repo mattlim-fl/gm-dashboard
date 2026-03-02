@@ -2,8 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
-import { encryptToken, decryptToken } from "../_shared/crypto.ts"
 import { findSaturdayInRange, getSameSaturdayLastYear } from "../_shared/saturday-utils.ts"
+import { getXeroAccessToken } from "../_shared/credentials.ts"
 
 // Minimal declaration for Deno global
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,149 +16,12 @@ const corsHeaders: Record<string, string> = {
 }
 
 // =====================================================
-// XERO INTEGRATION - Direct API calls
+// XERO INTEGRATION - Uses shared credentials module
 // =====================================================
 
-interface XeroConnection {
-  id: string
-  tenant_id: string
-  access_token: string
-  refresh_token_enc: string
-  expires_at: string
-  scopes: string[]
-}
-
-interface XeroTokenResponse {
-  access_token: string
-  refresh_token: string
-  expires_in: number
-  token_type: string
-  scope?: string
-}
-
-/**
- * Decrypt the encrypted refresh token using shared crypto module
- */
-async function decryptRefreshToken(encryptedToken: string): Promise<string> {
-  const encryptionKey = Deno.env.get('XERO_TOKEN_ENCRYPTION_KEY')
-  if (!encryptionKey) {
-    throw new Error('XERO_TOKEN_ENCRYPTION_KEY not configured')
-  }
-  return decryptToken(encryptedToken, encryptionKey)
-}
-
-/**
- * Encrypt the refresh token using shared crypto module
- */
-async function encryptRefreshToken(plainToken: string): Promise<string> {
-  const encryptionKey = Deno.env.get('XERO_TOKEN_ENCRYPTION_KEY')
-  if (!encryptionKey) {
-    throw new Error('XERO_TOKEN_ENCRYPTION_KEY not configured')
-  }
-  return encryptToken(plainToken, encryptionKey)
-}
-
-/**
- * Refresh the Xero access token
- */
-async function refreshXeroToken(refreshToken: string): Promise<XeroTokenResponse> {
-  const clientId = Deno.env.get('XERO_CLIENT_ID')
-  const clientSecret = Deno.env.get('XERO_CLIENT_SECRET')
-
-  if (!clientId || !clientSecret) {
-    throw new Error('XERO_CLIENT_ID or XERO_CLIENT_SECRET not configured')
-  }
-
-  const credentials = btoa(`${clientId}:${clientSecret}`)
-  
-  const response = await fetch('https://identity.xero.com/connect/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    }).toString(),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('Xero token refresh failed:', response.status, errorText)
-    throw new Error(`Xero token refresh failed: ${response.status}`)
-  }
-
-  return await response.json()
-}
-
-/**
- * Get Xero connection from database, refreshing token if needed
- */
-async function getXeroConnection(supabase: any): Promise<{ accessToken: string; tenantId: string } | null> {
-  // Fetch the stored connection
-  const { data: connection, error } = await supabase
-    .from('xero_connections')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error || !connection) {
-    console.error('No Xero connection found:', error?.message)
-    return null
-  }
-
-  const conn = connection as XeroConnection
-  const expiresAt = new Date(conn.expires_at).getTime()
-  const now = Date.now()
-  const fiveMinutes = 5 * 60 * 1000
-
-  // If token is about to expire (within 5 minutes), refresh it
-  if (expiresAt < now + fiveMinutes) {
-    console.log('Xero access token expired or expiring soon, refreshing...')
-    
-    try {
-      // Decrypt the refresh token
-      const decryptedRefreshToken = await decryptRefreshToken(conn.refresh_token_enc)
-      
-      // Refresh the access token
-      const newTokens = await refreshXeroToken(decryptedRefreshToken)
-      
-      // Encrypt the new refresh token
-      const encryptedRefreshToken = await encryptRefreshToken(newTokens.refresh_token)
-      
-      // Calculate new expiry
-      const newExpiresAt = new Date(now + newTokens.expires_in * 1000).toISOString()
-      
-      // Update the connection in database
-      const { error: updateError } = await supabase
-        .from('xero_connections')
-        .update({
-          access_token: newTokens.access_token,
-          refresh_token_enc: encryptedRefreshToken,
-          expires_at: newExpiresAt,
-          scopes: (newTokens.scope || '').split(/[\s,]+/).filter(Boolean),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('tenant_id', conn.tenant_id)
-
-      if (updateError) {
-        console.error('Failed to update Xero connection:', updateError.message)
-        throw new Error('Failed to update Xero connection')
-      }
-
-      console.log('Xero token refreshed successfully')
-      return { accessToken: newTokens.access_token, tenantId: conn.tenant_id }
-    } catch (err) {
-      console.error('Failed to refresh Xero token:', err)
-      // Try using the existing token anyway (might still work)
-      return { accessToken: conn.access_token, tenantId: conn.tenant_id }
-    }
-  }
-
-  return { accessToken: conn.access_token, tenantId: conn.tenant_id }
-}
+// Default venue for Xero P&L (uses organization-level credentials)
+// All venues in the same org share Xero credentials
+const DEFAULT_VENUE_FOR_XERO = 'manor'
 
 /**
  * Fetch P&L data directly from Xero API
@@ -499,22 +362,24 @@ function calculateDateRanges(): {
 
 /**
  * Fetch P&L data directly from Xero API
+ * Uses the new credentials system from venue_api_credentials
  */
 async function fetchPnlData(supabase: any, startDate: Date, endDate: Date): Promise<any> {
   const startDateStr = startDate.toISOString().split('T')[0]
   const endDateStr = endDate.toISOString().split('T')[0]
-  
+
   try {
     console.log(`Fetching P&L data from Xero: ${startDateStr} to ${endDateStr}`)
-    
-    // Get Xero connection (will refresh token if needed)
-    const xeroConnection = await getXeroConnection(supabase)
-    
+
+    // Get Xero access token using the new credentials system
+    // Uses org-level credentials (any venue in the org will work)
+    const xeroConnection = await getXeroAccessToken(supabase, DEFAULT_VENUE_FOR_XERO)
+
     if (!xeroConnection) {
       console.error('No Xero connection available')
       return null
     }
-    
+
     // Fetch raw P&L from Xero
     const rawPnl = await fetchPnlFromXero(
       xeroConnection.accessToken,
@@ -522,10 +387,10 @@ async function fetchPnlData(supabase: any, startDate: Date, endDate: Date): Prom
       startDateStr,
       endDateStr
     )
-    
+
     // Parse into our format
     const parsedPnl = parseXeroPnl(rawPnl, startDateStr, endDateStr)
-    
+
     console.log('P&L data parsed:', JSON.stringify(parsedPnl))
     return parsedPnl
   } catch (error) {

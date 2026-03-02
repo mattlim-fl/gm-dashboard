@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getSquareCredentialsByOrg, getOrganizationForLocation } from "../_shared/credentials.ts";
 
 interface BackfillRequest {
   start_date?: string; // ISO date string (e.g., "2024-01-01")
@@ -75,17 +76,43 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const productionToken = Deno.env.get("SQUARE_PRODUCTION_ACCESS_TOKEN");
 
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("Missing Supabase configuration");
     }
 
-    if (!productionToken) {
-      throw new Error("No Square production access token configured");
-    }
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Cache for organization tokens to avoid repeated DB lookups
+    const orgTokenCache = new Map<string, string>();
+
+    /**
+     * Get Square access token for a location
+     * Uses per-organization credentials with env var fallback
+     */
+    async function getTokenForLocation(locationId: string): Promise<string> {
+      // Get the organization for this location
+      const orgId = await getOrganizationForLocation(supabase, locationId);
+
+      if (orgId && orgTokenCache.has(orgId)) {
+        return orgTokenCache.get(orgId)!;
+      }
+
+      if (orgId) {
+        const creds = await getSquareCredentialsByOrg(supabase, orgId);
+        if (creds?.accessToken) {
+          orgTokenCache.set(orgId, creds.accessToken);
+          return creds.accessToken;
+        }
+      }
+
+      // Fall back to env var if no DB credentials found
+      const envToken = Deno.env.get("SQUARE_PRODUCTION_ACCESS_TOKEN") || Deno.env.get("SQUARE_ACCESS_TOKEN");
+      if (!envToken) {
+        throw new Error(`No Square credentials found for location ${locationId}`);
+      }
+      return envToken;
+    }
 
     // Update backfill status
     await supabase
@@ -139,9 +166,12 @@ serve(async (req) => {
       progress.current_date = `${effectiveStart.toISOString()} @ ${locationId}`;
 
       try {
+        // Get the access token for this location's organization
+        const accessToken = await getTokenForLocation(locationId);
+
         // Fetch payments for this location & window
         const windowPayments = await fetchPaymentsForDateRange(
-          productionToken,
+          accessToken,
           effectiveStart,
           effectiveEnd,
           locationId
@@ -166,8 +196,8 @@ serve(async (req) => {
               .select();
 
             if (error) {
-              console.error(`Database error for ${month} @ ${locationId}:`, error);
-              progress.errors.push(`Database error for ${month} @ ${locationId}: ${error.message}`);
+              console.error(`Database error for location ${locationId}:`, error);
+              progress.errors.push(`Database error for ${locationId}: ${error.message}`);
             } else {
               const syncedCount = insertedData?.length || 0;
               progress.total_payments_synced += syncedCount;

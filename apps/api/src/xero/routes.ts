@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import { buildAuthorizeUrl, exchangeCodeForToken, getConnections, getAccounts, getProfitAndLoss, refreshAccessToken } from './client';
+import { buildAuthorizeUrl, exchangeCodeForToken, getConnections, getAccounts, getProfitAndLoss } from './client';
 import { env } from '../env';
 import { z } from 'zod';
 import { type Clients } from '../middleware/auth';
-import { decryptSecret, getStoredConnection, upsertConnection } from './tokenStore';
+import { getXeroAccessToken, getXeroCredentials, saveCredentials, XeroCredentials } from '../shared/credentials';
 import { mapAccountToCategory } from './mapping';
 import type {
   XeroAccount,
@@ -17,21 +17,40 @@ import type {
 
 export const xero = new Hono();
 
+// Default venue for Xero operations (uses organization-level credentials)
+// All venues in the same org share Xero credentials
+const DEFAULT_VENUE_FOR_XERO = 'manor';
+
 // Start OAuth consent
 xero.get('/connect', (c) => {
-  const state = Math.random().toString(36).slice(2);
+  const venue = c.req.query('venue') || DEFAULT_VENUE_FOR_XERO;
+  // Encode venue in state for callback
+  const state = Buffer.from(JSON.stringify({ venue })).toString('base64');
   const url = buildAuthorizeUrl(state);
-  // Temporary debug to diagnose invalid scope/redirect issues
   console.log('[Xero] /connect authorize URL:', url);
   console.log('[Xero] scopes:', env.XERO_SCOPES);
   console.log('[Xero] redirect_uri:', env.XERO_REDIRECT_URI);
+  console.log('[Xero] venue:', venue);
   return c.redirect(url, 302);
 });
 
 // OAuth callback: exchange code, fetch connections, store tokens
 xero.get('/callback', async (c) => {
   const code = c.req.query('code');
+  const state = c.req.query('state');
   if (!code) return c.json({ error: 'Missing code' }, 400);
+
+  // Decode venue from state
+  let venue = DEFAULT_VENUE_FOR_XERO;
+  if (state) {
+    try {
+      const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+      venue = stateData.venue || DEFAULT_VENUE_FOR_XERO;
+    } catch {
+      console.warn('[Xero] Could not parse state, using default venue');
+    }
+  }
+
   const token = await exchangeCodeForToken(code);
   const connections = await getConnections(token.access_token);
   if (!Array.isArray(connections) || connections.length === 0) {
@@ -39,63 +58,47 @@ xero.get('/callback', async (c) => {
   }
   const primary = connections[0];
   const tenantId = primary.tenantId;
-  const expiresAt = new Date(Date.now() + token.expires_in * 1000).toISOString();
 
   // @ts-ignore
   const { supabaseService } = c.get('clients') as Clients;
-  await upsertConnection(supabaseService, {
-    tenantId,
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token,
-    expiresAt,
-    scopes: (token.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
+
+  // Store credentials in the new venue_api_credentials system
+  const result = await saveCredentials<XeroCredentials>(supabaseService, venue, 'xero', {
+    client_id: env.XERO_CLIENT_ID,
+    client_secret: env.XERO_CLIENT_SECRET,
+    refresh_token: token.refresh_token,
+    tenant_id: tenantId,
   });
 
+  if (!result.success) {
+    console.error('[Xero] Failed to save credentials:', result.error);
+    return c.json({ error: 'Failed to save credentials', detail: result.error }, 500);
+  }
+
+  console.log(`[Xero] Successfully connected for venue ${venue}`);
   return c.html('<html><body><h3>Xero connected successfully.</h3><p>You can close this window.</p></body></html>');
 });
 
 // Fetch Accounts (trimmed)
 xero.get('/accounts', async (c) => {
+  const venue = c.req.query('venue') || DEFAULT_VENUE_FOR_XERO;
+
   // @ts-ignore
   const { supabaseService } = c.get('clients') as Clients;
-  let con = await getStoredConnection(supabaseService);
-  if (!con) return c.json({ error: 'Xero not connected' }, 400);
-  // Refresh if expiring
-  if (new Date(con.expires_at).getTime() < Date.now() + 5 * 60 * 1000) {
-    const refreshed = await refreshAccessToken(decryptSecret(con.refresh_token_enc));
-    const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-    await upsertConnection(supabaseService, {
-      tenantId: con.tenant_id,
-      accessToken: refreshed.access_token,
-      refreshToken: refreshed.refresh_token,
-      expiresAt: newExpires,
-      scopes: (refreshed.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
-    });
-    con = (await getStoredConnection(supabaseService))!;
-  }
+
+  // Get fresh access token using the new credentials system
+  const xeroAuth = await getXeroAccessToken(supabaseService, venue);
+  if (!xeroAuth) return c.json({ error: 'Xero not connected' }, 400);
+
   let json: XeroAccountsResponse | null = null;
   try {
-    json = await getAccounts(con.access_token, con.tenant_id) as XeroAccountsResponse;
+    json = await getAccounts(xeroAuth.accessToken, xeroAuth.tenantId) as XeroAccountsResponse;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // If Xero responded unauthorized, force a refresh and retry once
-    if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
-      const refreshed = await refreshAccessToken(decryptSecret(con.refresh_token_enc));
-      const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-      await upsertConnection(supabaseService, {
-        tenantId: con.tenant_id,
-        accessToken: refreshed.access_token,
-        refreshToken: refreshed.refresh_token,
-        expiresAt: newExpires,
-        scopes: (refreshed.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
-      });
-      con = (await getStoredConnection(supabaseService))!;
-      json = await getAccounts(con.access_token, con.tenant_id) as XeroAccountsResponse;
-    } else {
-      console.error('[Xero] Accounts failed:', msg);
-      return c.json({ error: 'Xero Accounts request failed', detail: msg }, 502);
-    }
+    console.error('[Xero] Accounts failed:', msg);
+    return c.json({ error: 'Xero Accounts request failed', detail: msg }, 502);
   }
+
   const items = (json?.Accounts || []).map((a: XeroAccount) => ({
     AccountID: a.AccountID,
     Code: a.Code,
@@ -107,33 +110,30 @@ xero.get('/accounts', async (c) => {
 
 // Fetch Profit & Loss and normalize
 xero.post('/pnl', async (c) => {
-  const Body = z.object({ startDate: z.string().min(1), endDate: z.string().min(1), refresh: z.boolean().optional() });
+  const Body = z.object({
+    startDate: z.string().min(1),
+    endDate: z.string().min(1),
+    refresh: z.boolean().optional(),
+    venue: z.string().optional(),
+  });
   const input = Body.safeParse(await c.req.json().catch(() => ({})));
   if (!input.success) return c.json({ error: input.error.flatten() }, 400);
 
+  const venue = input.data.venue || DEFAULT_VENUE_FOR_XERO;
+
   // @ts-ignore
   const { supabaseService } = c.get('clients') as Clients;
-  let con = await getStoredConnection(supabaseService);
-  if (!con) return c.json({ error: 'Xero not connected' }, 400);
-  if (new Date(con.expires_at).getTime() < Date.now() + 5 * 60 * 1000) {
-    const refreshed = await refreshAccessToken(decryptSecret(con.refresh_token_enc));
-    const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-    await upsertConnection(supabaseService, {
-      tenantId: con.tenant_id,
-      accessToken: refreshed.access_token,
-      refreshToken: refreshed.refresh_token,
-      expiresAt: newExpires,
-      scopes: (refreshed.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
-    });
-    con = (await getStoredConnection(supabaseService))!;
-  }
+
+  // Get Xero credentials to check tenant_id for caching
+  const creds = await getXeroCredentials(supabaseService, venue);
+  if (!creds) return c.json({ error: 'Xero not connected' }, 400);
 
   // Caching: try snapshot first unless refresh requested
   if (!input.data.refresh) {
     const { data: existing, error: snapErr } = await supabaseService
       .from('xero_pnl_snapshots')
       .select('id,result_json,updated_at')
-      .eq('tenant_id', con.tenant_id)
+      .eq('tenant_id', creds.tenant_id)
       .eq('start_date', input.data.startDate)
       .eq('end_date', input.data.endDate)
       .maybeSingle();
@@ -143,29 +143,19 @@ xero.post('/pnl', async (c) => {
     }
   }
 
+  // Get fresh access token
+  const xeroAuth = await getXeroAccessToken(supabaseService, venue);
+  if (!xeroAuth) return c.json({ error: 'Xero not connected' }, 400);
+
   let data: XeroPnlResponse | null = null;
   try {
-    data = await getProfitAndLoss(con.access_token, con.tenant_id, input.data.startDate, input.data.endDate) as XeroPnlResponse;
+    data = await getProfitAndLoss(xeroAuth.accessToken, xeroAuth.tenantId, input.data.startDate, input.data.endDate) as XeroPnlResponse;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // If unauthorized, refresh and retry once
-    if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
-      const refreshed = await refreshAccessToken(decryptSecret(con.refresh_token_enc));
-      const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-      await upsertConnection(supabaseService, {
-        tenantId: con.tenant_id,
-        accessToken: refreshed.access_token,
-        refreshToken: refreshed.refresh_token,
-        expiresAt: newExpires,
-        scopes: (refreshed.scope || env.XERO_SCOPES).split(/[\s,]+/).filter(Boolean),
-      });
-      con = (await getStoredConnection(supabaseService))!;
-      data = await getProfitAndLoss(con.access_token, con.tenant_id, input.data.startDate, input.data.endDate) as XeroPnlResponse;
-    } else {
-      console.error('[Xero] P&L fetch failed:', msg);
-      return c.json({ error: 'Xero P&L request failed', detail: msg }, 502);
-    }
+    console.error('[Xero] P&L fetch failed:', msg);
+    return c.json({ error: 'Xero P&L request failed', detail: msg }, 502);
   }
+
   // Accounting Reports API structure: data.Reports[0].Rows is a tree.
   const period = { start: input.data.startDate, end: input.data.endDate };
   let incomeTotal = 0;
@@ -223,12 +213,12 @@ xero.post('/pnl', async (c) => {
         // This allows us to maintain all mapping rules in one place (mapping.ts)
         // and makes it easier to extend to database-backed mappings later
         let cat = mapAccountToCategory({ Name: label });
-        
+
         // Also check section name for COGS (Direct Costs, Cost of Sales sections)
         if (
-          cat === 'other' && 
-          (sectionL.includes('cost of sales') || 
-           sectionL.includes('cost of goods') || 
+          cat === 'other' &&
+          (sectionL.includes('cost of sales') ||
+           sectionL.includes('cost of goods') ||
            sectionL.includes('direct costs'))
         ) {
           cat = 'cogs';
@@ -267,7 +257,7 @@ xero.post('/pnl', async (c) => {
   await supabaseService
     .from('xero_pnl_snapshots')
     .upsert({
-      tenant_id: con.tenant_id,
+      tenant_id: creds.tenant_id,
       start_date: input.data.startDate,
       end_date: input.data.endDate,
       result_json: result,
@@ -275,5 +265,3 @@ xero.post('/pnl', async (c) => {
     }, { onConflict: 'tenant_id,start_date,end_date' });
   return c.json({ ...result, meta: { cached: false, lastUpdated: new Date().toISOString() } });
 });
-
-

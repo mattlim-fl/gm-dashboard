@@ -15,10 +15,16 @@ declare const Deno: any
 // Integration types
 export type IntegrationType = 'square' | 'xero' | 'gmail' | 'resend'
 
+// Credential scoping: which integrations use which scope level
+// - Per-venue: gmail (each venue has its own inbox)
+// - Per-organization: square, xero (org shares one account across venues)
+// - Global: resend (single account for all)
+
 // Credential structures for each integration
 export interface SquareCredentials {
   access_token: string
-  location_id: string
+  // Note: location_id is stored in square_locations table, not in credentials
+  // since one Square account (per-org) can have multiple locations
 }
 
 export interface XeroCredentials {
@@ -140,8 +146,8 @@ export async function getCredentials<T extends CredentialData>(
     let data: CredentialRow | null = null
     let error: unknown = null
 
-    if (integrationType === 'square' || integrationType === 'gmail') {
-      // Per-venue credentials
+    if (integrationType === 'gmail') {
+      // Per-venue credentials - each venue has its own inbox
       if (!venue) {
         console.warn(`getCredentials: venue required for ${integrationType}`)
         return null
@@ -154,10 +160,10 @@ export async function getCredentials<T extends CredentialData>(
         .single()
       data = result.data as CredentialRow | null
       error = result.error
-    } else if (integrationType === 'xero') {
-      // Per-organization credentials
+    } else if (integrationType === 'square' || integrationType === 'xero') {
+      // Per-organization credentials - org shares one account across venues
       if (!venue) {
-        console.warn('getCredentials: venue required for xero lookup')
+        console.warn(`getCredentials: venue required for ${integrationType} lookup`)
         return null
       }
       const orgId = await getOrganizationForVenue(supabase, venue)
@@ -170,7 +176,7 @@ export async function getCredentials<T extends CredentialData>(
         .select('*')
         .is('venue', null)
         .eq('organization_id', orgId)
-        .eq('integration_type', 'xero')
+        .eq('integration_type', integrationType)
         .single()
       data = result.data as CredentialRow | null
       error = result.error
@@ -224,16 +230,16 @@ export async function saveCredentials<T extends CredentialData>(
 
     let scopeData: { venue: string | null; organization_id: string | null }
 
-    if (integrationType === 'square' || integrationType === 'gmail') {
-      // Per-venue credentials
+    if (integrationType === 'gmail') {
+      // Per-venue credentials - each venue has its own inbox
       if (!venue) {
         return { success: false, error: `Venue required for ${integrationType} credentials` }
       }
       scopeData = { venue, organization_id: null }
-    } else if (integrationType === 'xero') {
-      // Per-organization credentials
+    } else if (integrationType === 'square' || integrationType === 'xero') {
+      // Per-organization credentials - org shares one account across venues
       if (!venue) {
-        return { success: false, error: 'Venue required for xero credentials lookup' }
+        return { success: false, error: `Venue required for ${integrationType} credentials lookup` }
       }
       const orgId = await getOrganizationForVenue(supabase, venue)
       if (!orgId) {
@@ -302,13 +308,15 @@ export async function updateVerificationStatus(
       updateData.verification_error = null
     }
 
-    if (integrationType === 'square' || integrationType === 'gmail') {
+    if (integrationType === 'gmail') {
+      // Per-venue credentials
       await supabase
         .from('venue_api_credentials')
         .update(updateData)
         .eq('venue', venue)
         .eq('integration_type', integrationType)
-    } else if (integrationType === 'xero' && venue) {
+    } else if ((integrationType === 'square' || integrationType === 'xero') && venue) {
+      // Per-organization credentials
       const orgId = await getOrganizationForVenue(supabase, venue)
       if (orgId) {
         await supabase
@@ -316,7 +324,7 @@ export async function updateVerificationStatus(
           .update(updateData)
           .is('venue', null)
           .eq('organization_id', orgId)
-          .eq('integration_type', 'xero')
+          .eq('integration_type', integrationType)
       }
     } else if (integrationType === 'resend') {
       await supabase
@@ -332,32 +340,128 @@ export async function updateVerificationStatus(
 }
 
 /**
- * Get Square credentials with env var fallback
- * Use this in edge functions for backwards compatibility
+ * Get Square access token and location ID
+ * Square access_token is per-organization (one Square account per org)
+ * Square location_id is per-venue (stored in square_locations table)
  */
 export async function getSquareCredentials(
   supabase: SupabaseClient,
   venue: string
 ): Promise<{ accessToken: string; locationId: string } | null> {
-  // Try DB first
+  // Get access token from org-level credentials
   const dbCreds = await getCredentials<SquareCredentials>(supabase, venue, 'square')
-  if (dbCreds) {
-    return {
-      accessToken: dbCreds.access_token,
-      locationId: dbCreds.location_id,
+  let accessToken: string | null = dbCreds?.access_token || null
+
+  // Fall back to env vars for access token
+  if (!accessToken) {
+    accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN') || Deno.env.get('SQUARE_PRODUCTION_ACCESS_TOKEN') || null
+    if (accessToken) {
+      console.log('Using Square access token from environment variables (fallback)')
     }
   }
 
-  // Fall back to env vars
-  const accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN')
-  const locationId = Deno.env.get('SQUARE_LOCATION_ID')
-
-  if (accessToken && locationId) {
-    console.log('Using Square credentials from environment variables (fallback)')
-    return { accessToken, locationId }
+  if (!accessToken) {
+    return null
   }
 
-  return null
+  // Get location ID from square_locations table for this venue
+  const { data: location, error } = await supabase
+    .from('square_locations')
+    .select('square_location_id')
+    .eq('location_name', venue)
+    .eq('is_active', true)
+    .single()
+
+  let locationId = (location as { square_location_id: string } | null)?.square_location_id || null
+
+  // Fall back to env var for location ID
+  if (!locationId) {
+    locationId = Deno.env.get('SQUARE_LOCATION_ID') || null
+    if (locationId) {
+      console.log('Using Square location ID from environment variables (fallback)')
+    }
+  }
+
+  if (!locationId) {
+    console.warn(`No Square location found for venue: ${venue}`)
+    return null
+  }
+
+  return { accessToken, locationId }
+}
+
+/**
+ * Get Square access token by organization ID directly
+ * Use this when you have an org ID but not a venue
+ */
+export async function getSquareCredentialsByOrg(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<{ accessToken: string } | null> {
+  try {
+    const result = await supabase
+      .from('venue_api_credentials')
+      .select('*')
+      .is('venue', null)
+      .eq('organization_id', organizationId)
+      .eq('integration_type', 'square')
+      .single()
+
+    const data = result.data as CredentialRow | null
+    if (result.error || !data || !data.is_active) {
+      // Fall back to env vars
+      const accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN') || Deno.env.get('SQUARE_PRODUCTION_ACCESS_TOKEN')
+      if (accessToken) {
+        console.log('Using Square credentials from environment variables (fallback)')
+        return { accessToken }
+      }
+      return null
+    }
+
+    const encryptionKey = getEncryptionKey()
+    const decrypted = await decryptToken(data.credentials_encrypted, encryptionKey)
+    const creds = JSON.parse(decrypted) as SquareCredentials
+    return { accessToken: creds.access_token }
+  } catch (err) {
+    console.error('Error fetching Square credentials by org:', err)
+    // Fall back to env vars
+    const accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN') || Deno.env.get('SQUARE_PRODUCTION_ACCESS_TOKEN')
+    if (accessToken) {
+      console.log('Using Square credentials from environment variables (fallback)')
+      return { accessToken }
+    }
+    return null
+  }
+}
+
+/**
+ * Map a Square location ID to a venue name
+ * Location IDs are stored in square_locations table with location_name (venue)
+ */
+export async function getVenueForLocation(
+  supabase: SupabaseClient,
+  locationId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('square_locations')
+    .select('location_name')
+    .eq('square_location_id', locationId)
+    .single()
+
+  if (error || !data) return null
+  return (data as { location_name: string }).location_name
+}
+
+/**
+ * Get the organization ID for a Square location
+ */
+export async function getOrganizationForLocation(
+  supabase: SupabaseClient,
+  locationId: string
+): Promise<string | null> {
+  const venue = await getVenueForLocation(supabase, locationId)
+  if (!venue) return null
+  return getOrganizationForVenue(supabase, venue)
 }
 
 /**
@@ -403,4 +507,63 @@ export async function getXeroCredentials(
   venue: string
 ): Promise<XeroCredentials | null> {
   return getCredentials<XeroCredentials>(supabase, venue, 'xero')
+}
+
+/**
+ * Get a valid Xero access token for a venue
+ * This refreshes the token automatically since access tokens are short-lived (30 min)
+ * Returns both the access token and tenant ID needed for API calls
+ */
+export async function getXeroAccessToken(
+  supabase: SupabaseClient,
+  venue: string
+): Promise<{ accessToken: string; tenantId: string } | null> {
+  const creds = await getXeroCredentials(supabase, venue)
+  if (!creds) {
+    console.log(`No Xero credentials found for venue: ${venue}`)
+    return null
+  }
+
+  try {
+    // Refresh the access token
+    const credentials = btoa(`${creds.client_id}:${creds.client_secret}`)
+    const response = await fetch('https://identity.xero.com/connect/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: creds.refresh_token,
+      }).toString(),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Xero token refresh failed:', response.status, errorText)
+      return null
+    }
+
+    const tokenData = await response.json()
+
+    // Update the stored refresh token if it changed (Xero rotates refresh tokens)
+    if (tokenData.refresh_token && tokenData.refresh_token !== creds.refresh_token) {
+      console.log('Xero refresh token rotated, updating stored credentials')
+      await saveCredentials(supabase, venue, 'xero', {
+        client_id: creds.client_id,
+        client_secret: creds.client_secret,
+        refresh_token: tokenData.refresh_token,
+        tenant_id: creds.tenant_id,
+      })
+    }
+
+    return {
+      accessToken: tokenData.access_token,
+      tenantId: creds.tenant_id,
+    }
+  } catch (err) {
+    console.error('Error refreshing Xero token:', err)
+    return null
+  }
 }
