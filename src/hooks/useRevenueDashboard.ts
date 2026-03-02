@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { toast } from '@/hooks/use-toast';
 import { useState, useCallback } from 'react';
 import { findSaturdayInRange, getSameSaturdayLastYear } from '@/lib/saturday-utils';
 
@@ -378,12 +378,12 @@ export const useRevenueDashboard = () => {
   // Fetch metrics for a custom date range
   const fetchAllMetrics = useCallback(async (startDate: Date, endDate: Date, venueFilter?: string | null) => {
     if (!startDate || !endDate) {
-      toast.error('Please select both start and end dates');
+      toast({ title: 'Error', description: 'Please select both start and end dates', variant: 'destructive' });
       return;
     }
 
     if (startDate > endDate) {
-      toast.error('Start date must be before end date');
+      toast({ title: 'Error', description: 'Start date must be before end date', variant: 'destructive' });
       return;
     }
 
@@ -399,10 +399,10 @@ export const useRevenueDashboard = () => {
       });
 
       if (customRangeQuery.data?.currentPeriod.eventCount === 0) {
-        toast.info('No revenue data found for the selected date range');
+        toast({ title: 'Info', description: 'No revenue data found for the selected date range' });
       }
     } catch (_error) {
-      toast.error('Failed to fetch revenue data. Please try again.');
+      toast({ title: 'Error', description: 'Failed to fetch revenue data. Please try again.', variant: 'destructive' });
     }
   }, [queryClient, customRangeQuery.data?.currentPeriod.eventCount]);
 
@@ -411,7 +411,7 @@ export const useRevenueDashboard = () => {
     try {
       await queryClient.invalidateQueries({ queryKey: ['revenue-core-statistics'] });
     } catch (_error) {
-      toast.error('Failed to fetch core statistics. Please try again.');
+      toast({ title: 'Error', description: 'Failed to fetch core statistics. Please try again.', variant: 'destructive' });
     }
   }, [queryClient]);
 
