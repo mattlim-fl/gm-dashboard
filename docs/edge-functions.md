@@ -811,22 +811,15 @@ Tests Gmail connection by listing labels.
 
 ## Environment Variables
 
-Required environment variables (set in Supabase dashboard):
+See **CLAUDE.md → Environment Variables** for the complete, up-to-date list of:
+- Supabase Edge Function secrets
+- Netlify environment variables
+- Backup key workarounds for corrupted reserved secrets
 
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Service role key for admin operations
-- `SQUARE_ACCESS_TOKEN` - Square API access token
-- `SQUARE_LOCATION_ID` - Square location ID
-- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins
-- `XERO_CLIENT_ID` - Xero OAuth client ID
-- `XERO_CLIENT_SECRET` - Xero OAuth client secret
-
-### Email Agent Variables
-
-- `GMAIL_CLIENT_ID` - Google OAuth app client ID (for email agent)
-- `GMAIL_CLIENT_SECRET` - Google OAuth app client secret
-- `ANTHROPIC_API_KEY` - Claude API key (used for classification and drafting)
-- `TOKEN_ENCRYPTION_KEY` - AES-256 key for encrypting stored OAuth tokens
+**Key points:**
+- Square and Resend credentials are stored in the database (Settings → API Integrations), not as environment variables
+- Use `CREDENTIALS_ENCRYPTION_KEY` for encryption (not `TOKEN_ENCRYPTION_KEY`)
+- The centralized config module (`_shared/config.ts`) manages all env var access
 
 ## Monitoring
 

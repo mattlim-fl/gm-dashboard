@@ -247,6 +247,8 @@ Deno.test("description of test", async () => {
 | `xero-oauth` | Xero OAuth callback handler |
 | `update-cron-schedule` | Update cron job schedules |
 
+**Note on `business-performance`:** This function sends emails directly via the Resend API instead of calling the `send-email` edge function. This avoids edge-function-to-edge-function HTTP calls, which can fail due to JWT issues with Supabase's gateway.
+
 ## Testing Email Templates
 
 Go to **Settings → Notifications tab** to test email templates:
@@ -283,6 +285,17 @@ Set these in Supabase Dashboard → Edge Functions → Secrets:
 | `GMAIL_CLIENT_SECRET` | For Gmail | Google Cloud OAuth client secret |
 | `ANTHROPIC_API_KEY` | For email agent | Claude API key for email classification |
 | `GUEST_LIST_SECRET` | No | Secret for signing guest list tokens |
+
+**Backup Keys (Workaround for Corrupted Reserved Secrets):**
+
+Supabase reserved secrets (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) can become corrupted and cannot be edited or deleted via CLI/UI. If this happens, set backup keys:
+
+| Variable | Purpose |
+|----------|---------|
+| `SERVICE_ROLE_KEY_BACKUP` | Backup service role key (JWT, ~200 chars starting with `eyJ`) |
+| `ANON_KEY_BACKUP` | Backup anon key (JWT, ~200 chars starting with `eyJ`) |
+
+The `config.ts` module automatically tries backup keys first if they exist and are valid JWTs.
 
 #### Netlify Environment Variables (API Server)
 Set these in Netlify Dashboard → Site settings → Environment variables:
