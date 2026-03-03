@@ -4,10 +4,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { findSaturdayInRange, getSameSaturdayLastYear } from "../_shared/saturday-utils.ts"
 import { getXeroAccessToken } from "../_shared/credentials.ts"
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any
+import { config } from "../_shared/config.ts"
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -930,41 +927,47 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string): Promis
   }
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+async function sendEmail(supabase: any, to: string, subject: string, html: string): Promise<boolean> {
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // Import Resend credentials directly instead of calling send-email function
+    // (workaround for corrupted SUPABASE_SERVICE_ROLE_KEY/ANON_KEY secrets)
+    const { getResendCredentials } = await import("../_shared/credentials.ts")
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('Missing Supabase credentials for send-email')
+    console.log('Fetching Resend credentials for direct send...')
+    const resendCreds = await getResendCredentials(supabase)
+
+    if (!resendCreds?.apiKey) {
+      console.error('No Resend API key configured')
       return false
     }
 
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+    console.log('Sending email directly via Resend to:', to)
+
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Authorization': `Bearer ${resendCreds.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        from: 'GM Dashboard <phil@manorleederville.com>',
         to,
         subject,
         html,
-        from: 'GM Dashboard <phil@manorleederville.com>',
-        template: EMAIL_TEMPLATE,
       }),
     })
 
+    const result = await res.json()
+
     if (!res.ok) {
-      const errorText = await res.text().catch(() => '')
-      console.error('Error sending email:', res.status, errorText)
+      console.error('Resend error:', result)
       return false
     }
 
-    const data = await res.json()
-    return data?.success === true
+    console.log('Email sent successfully:', result?.id)
+    return true
   } catch (error) {
-    console.error('Error invoking send-email function:', error)
+    console.error('Error sending email:', error)
     return false
   }
 }
@@ -1002,14 +1005,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return json({ error: 'Supabase credentials not configured' }, 500)
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey)
     
     // Parse request body for test mode flags
     const body = await req.json().catch(() => ({}))
@@ -1095,7 +1091,7 @@ serve(async (req: Request) => {
 
       for (const email of notificationSettings.recipient_emails) {
         console.log(`Sending email to ${email}...`)
-        const success = await sendEmail(email, subject, emailHtml)
+        const success = await sendEmail(supabase, email, subject, emailHtml)
         emailResults.push({ recipient: email, success })
         
         await logNotification(

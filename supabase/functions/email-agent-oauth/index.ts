@@ -14,10 +14,7 @@ import {
   exchangeCodeForTokens,
   encryptRefreshToken,
 } from "../_shared/gmail.ts";
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any;
+import { config } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,13 +52,9 @@ serve(async (req: Request) => {
   const url = new URL(req.url);
   const path = url.pathname.split("/").pop();
 
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const APP_URL = Deno.env.get("APP_URL") || "http://localhost:5173";
-
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json({ error: "Supabase credentials not configured" }, 500);
-  }
+  const SUPABASE_URL = config.supabaseUrl;
+  const SUPABASE_SERVICE_ROLE_KEY = config.supabaseServiceKey;
+  const APP_URL = config.appUrl;
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 

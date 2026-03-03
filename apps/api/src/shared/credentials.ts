@@ -58,10 +58,7 @@ interface CredentialRow {
  * Get encryption key from environment
  */
 function getEncryptionKey(): Buffer {
-  const key = process.env.CREDENTIALS_ENCRYPTION_KEY || env.XERO_TOKEN_ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error('CREDENTIALS_ENCRYPTION_KEY or XERO_TOKEN_ENCRYPTION_KEY environment variable is required');
-  }
+  const key = env.CREDENTIALS_ENCRYPTION_KEY;
   // If 64-char hex string, parse as hex; otherwise hash it
   if (/^[0-9a-fA-F]{64}$/.test(key)) {
     return Buffer.from(key, 'hex');

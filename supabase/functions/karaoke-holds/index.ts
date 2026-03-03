@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { config } from "../_shared/config.ts"
 
 type CreateHoldRequest = {
   boothId: string;
@@ -19,7 +20,7 @@ type ModifyHoldRequest = {
 };
 
 // CORS allowlist via env: ALLOWED_ORIGINS=domain1,domain2
-const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').map(s => s.trim()).filter(Boolean);
+const allowedOrigins = config.allowedOrigins;
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('origin') || '';
   const allowOrigin = allowedOrigins.length === 0 ? '*' : (allowedOrigins.includes(origin) ? origin : 'null');
@@ -48,9 +49,9 @@ serve(async (req) => {
   let action = req.headers.get('x-action') || url.searchParams.get('action') || '';
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
-    // Use service role (or anon as fallback) so public holds can be created via this function under RLS
+    const supabaseUrl = config.supabaseUrl;
+    const supabaseServiceKey = config.supabaseServiceKey;
+    // Use service role so public holds can be created via this function under RLS
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       global: {
         headers: {

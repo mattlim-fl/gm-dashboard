@@ -1,11 +1,11 @@
 // @ts-expect-error - Deno remote import types are not available in this toolchain
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-expect-error - Deno remote import types
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
 import { chargeSquare, refundSquarePayment, toIdempotencyKey, createSquareOrder } from "../_shared/square.ts"
-
-// Minimal declaration for Deno global used for env access in Edge Functions
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any
+import { getSquareCredentials } from "../_shared/credentials.ts"
+import { config } from "../_shared/config.ts"
 
 type TicketPayAndBookRequest = {
   customerName: string
@@ -55,8 +55,7 @@ function getOriginFromRequest(req: Request): string {
 
 // Wrapper to get secret from environment
 async function generateGuestListToken(bookingId: string, bookingDate: string): Promise<string> {
-  const secret = Deno.env.get('GUEST_LIST_SECRET') || 'guest-list-secret'
-  return generateGuestListTokenBase(bookingId, bookingDate, secret)
+  return generateGuestListTokenBase(bookingId, bookingDate, config.guestListSecret)
 }
 
 function generateReferenceCode(): string {
@@ -243,14 +242,10 @@ serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')
-    const SQUARE_ACCESS_TOKEN = Deno.env.get('SQUARE_ACCESS_TOKEN')
-    const SQUARE_LOCATION_ID = Deno.env.get('SQUARE_LOCATION_ID')
+    const SUPABASE_URL = config.supabaseUrl
+    const SUPABASE_SERVICE_ROLE_KEY = config.supabaseServiceKey
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 500)
-    if (!SQUARE_ACCESS_TOKEN) return json({ success: false, error: 'Square access token not configured' }, 500)
-    if (!SQUARE_LOCATION_ID) return json({ success: false, error: 'Square location ID not configured' }, 500)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     // Get the origin from the request for building the share URL
     const origin = getOriginFromRequest(req)
@@ -274,6 +269,12 @@ serve(async (req: Request) => {
     if (!input.customerEmail && !input.customerPhone) return json({ success: false, error: 'Email or phone is required' }, 400)
     if (!input.ticketQuantity || input.ticketQuantity < 1) return json({ success: false, error: 'Invalid ticket quantity' }, 400)
     if (!input.paymentToken) return json({ success: false, error: 'Missing payment token' }, 400)
+
+    // Get Square credentials from database
+    const squareCreds = await getSquareCredentials(supabase, input.venue)
+    if (!squareCreds) return json({ success: false, error: 'Square credentials not configured for this venue' }, 500)
+    const SQUARE_ACCESS_TOKEN = squareCreds.accessToken
+    const SQUARE_LOCATION_ID = squareCreds.locationId
 
     // Determine if this is a guest purchase (via shared link) or organiser purchase
     let parentBookingId: string | null = null

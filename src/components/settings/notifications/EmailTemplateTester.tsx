@@ -42,7 +42,7 @@ export function EmailTemplateTester() {
 
     try {
       setSending(true);
-      const { error } = await supabase.functions.invoke('send-email', {
+      const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           template: 'karaoke-confirmation',
           to: testEmail,
@@ -61,17 +61,27 @@ export function EmailTemplateTester() {
         },
       });
 
+      console.log('send-email response:', { data, error });
+
       if (error) throw error;
 
+      // Check for business logic errors in response body
+      if (data && !data.success) {
+        throw new Error(data.error || 'Unknown error from send-email function');
+      }
+
+      const emailId = data?.data?.id;
       toast({
         title: 'Success',
-        description: `Test email sent to ${testEmail}`,
+        description: emailId
+          ? `Test email sent to ${testEmail} (ID: ${emailId})`
+          : `Test email sent to ${testEmail}`,
       });
     } catch (error) {
       console.error('Error sending test email:', error);
       toast({
         title: 'Error',
-        description: 'Failed to send test email. Check the console for details.',
+        description: error instanceof Error ? error.message : 'Failed to send test email. Check the console for details.',
         variant: 'destructive',
       });
     } finally {

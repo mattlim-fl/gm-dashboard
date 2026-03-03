@@ -28,7 +28,7 @@ export function useAlbums(venue: Venue, includeArchived = false) {
   return useQuery({
     queryKey: [ALBUMS_KEY, venue, includeArchived],
     queryFn: () => getAlbums(venue, includeArchived),
-    staleTime: 30000, // 30 seconds
+    staleTime: 1000 * 60 * 5, // 5 minutes - albums rarely change
   });
 }
 
@@ -51,7 +51,7 @@ export function useAlbumPhotos(albumId: string | undefined, includeArchived = fa
     queryKey: [PHOTOS_KEY, albumId, includeArchived],
     queryFn: () => (albumId ? getAlbumPhotos(albumId, includeArchived) : []),
     enabled: !!albumId,
-    staleTime: 30000,
+    staleTime: 1000 * 60 * 5, // 5 minutes - photos rarely change
   });
 }
 

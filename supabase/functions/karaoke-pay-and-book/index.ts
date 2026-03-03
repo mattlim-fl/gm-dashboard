@@ -5,10 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { generateSecureCode, generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
 import { chargeSquare, refundSquarePayment, toIdempotencyKey, createSquareOrder } from "../_shared/square.ts"
 import { getSquareCredentials } from "../_shared/credentials.ts"
-
-// Minimal declaration for Deno global used for env access in Edge Functions
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any
+import { config } from "../_shared/config.ts"
 
 type PayAndBookRequest = {
   holdId: string
@@ -53,8 +50,7 @@ function json(body: unknown, status = 200) {
 
 // Wrapper to get secret from environment
 async function generateGuestListToken(bookingId: string, bookingDate: string): Promise<string> {
-  const secret = Deno.env.get('GUEST_LIST_SECRET') || 'guest-list-secret'
-  return generateGuestListTokenBase(bookingId, bookingDate, secret)
+  return generateGuestListTokenBase(bookingId, bookingDate, config.guestListSecret)
 }
 
 function timeToMinutes(timeHHMM: string): number {
@@ -230,10 +226,8 @@ serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ success: false, error: 'Supabase env not configured' }, 500)
+    const SUPABASE_URL = config.supabaseUrl
+    const SUPABASE_SERVICE_ROLE_KEY = config.supabaseServiceKey
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 

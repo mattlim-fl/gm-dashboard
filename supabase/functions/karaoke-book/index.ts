@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { generateGuestListToken as generateGuestListTokenBase } from "../_shared/crypto.ts"
+import { config } from "../_shared/config.ts"
 
 type FinalizeRequest = {
   holdId: string;
@@ -12,7 +13,7 @@ type FinalizeRequest = {
 };
 
 // CORS allowlist via env: ALLOWED_ORIGINS=domain1,domain2
-const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') || '').split(',').map(s => s.trim()).filter(Boolean);
+const allowedOrigins = config.allowedOrigins;
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('origin') || '';
   const allowOrigin = allowedOrigins.length === 0 ? '*' : (allowedOrigins.includes(origin) ? origin : 'null');
@@ -25,8 +26,7 @@ function getCorsHeaders(req: Request) {
 
 // Wrapper to get secret from environment
 async function generateGuestListToken(bookingId: string, bookingDate: string): Promise<string> {
-  const secret = Deno.env.get('GUEST_LIST_SECRET') || 'guest-list-secret'
-  return generateGuestListTokenBase(bookingId, bookingDate, secret)
+  return generateGuestListTokenBase(bookingId, bookingDate, config.guestListSecret)
 }
 
 serve(async (req) => {
@@ -42,9 +42,9 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!;
-    // Use service role (or anon as fallback) so finalising bookings can safely bypass RLS within this controlled function
+    const supabaseUrl = config.supabaseUrl;
+    const supabaseServiceKey = config.supabaseServiceKey;
+    // Use service role so finalising bookings can safely bypass RLS within this controlled function
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       global: {
         headers: {

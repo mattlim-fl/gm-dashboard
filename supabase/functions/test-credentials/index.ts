@@ -15,10 +15,7 @@ import {
   updateVerificationStatus,
   IntegrationType,
 } from "../_shared/credentials.ts";
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any;
+import { config } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -181,14 +178,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return json({ error: "Supabase credentials not configured" }, 500);
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
 
     const adminCheck = await requireAdmin(req, supabase);
     if (!adminCheck.ok) return adminCheck.response;

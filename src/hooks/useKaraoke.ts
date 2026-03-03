@@ -327,7 +327,7 @@ export const useKaraokeAvailability = (params: { boothId?: string; venue?: 'mano
       endTime: params.endTime,
     }),
     enabled: (!!params.bookingDate && (!!params.boothId || !!params.venue)) || params.action === 'boothsForSlot',
-    staleTime: 30_000,
+    staleTime: 1000 * 60 * 2, // 2 minutes - availability can be slightly stale
   });
 };
 
@@ -383,7 +383,8 @@ export const useActiveKaraokeHolds = (params: { boothId?: string; bookingDate?: 
     queryKey: ['karaoke-holds', params.boothId, params.bookingDate],
     queryFn: () => karaokeService.getActiveHolds({ boothId: params.boothId!, bookingDate: params.bookingDate! }),
     enabled: !!params.boothId && !!params.bookingDate,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000, // 30 seconds - reduced from 10s to decrease API calls
+    staleTime: 1000 * 15,    // 15 seconds
   });
 };
 

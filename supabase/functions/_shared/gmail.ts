@@ -5,10 +5,7 @@
 
 import { withRetry, RetryOptions } from "./retry.ts";
 import { encryptToken, decryptToken } from "./crypto.ts";
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any;
+import { config, isGmailConfigured } from "./config.ts";
 
 // Gmail API constants
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
@@ -83,8 +80,8 @@ export interface ThreadMessage {
  * Get Gmail OAuth credentials from environment
  */
 function getCredentials(): GmailCredentials {
-  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
-  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+  const clientId = config.gmailClientId;
+  const clientSecret = config.gmailClientSecret;
 
   if (!clientId || !clientSecret) {
     throw new Error("Gmail OAuth credentials not configured");
@@ -97,11 +94,7 @@ function getCredentials(): GmailCredentials {
  * Get encryption key for token storage
  */
 function getEncryptionKey(): string {
-  const key = Deno.env.get("TOKEN_ENCRYPTION_KEY");
-  if (!key) {
-    throw new Error("TOKEN_ENCRYPTION_KEY not configured");
-  }
-  return key;
+  return config.credentialsEncryptionKey;
 }
 
 /**
@@ -588,10 +581,5 @@ export async function markAsRead(
  * Check if Gmail OAuth is configured
  */
 export function isConfigured(): boolean {
-  try {
-    getCredentials();
-    return true;
-  } catch {
-    return false;
-  }
+  return isGmailConfigured();
 }

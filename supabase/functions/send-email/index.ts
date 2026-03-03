@@ -3,10 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { getResendCredentials } from "../_shared/credentials.ts"
-
-// Minimal declaration for Deno global used for env access in Edge Functions
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any
+import { config } from "../_shared/config.ts"
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -672,21 +669,46 @@ serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405)
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+    const SUPABASE_URL = config.supabaseUrl
+    const SUPABASE_SERVICE_ROLE_KEY = config.supabaseServiceKey
 
-    // Get Resend credentials from DB with env var fallback
-    let RESEND_API_KEY: string | undefined
-    if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-      const resendCreds = await getResendCredentials(supabase)
-      RESEND_API_KEY = resendCreds?.apiKey
+    // Auth verification: accept user JWTs, service role key, or internal secret
+    const authHeader = req.headers.get("Authorization")
+    const internalSecret = req.headers.get("X-Internal-Secret")
+
+    // Check for internal secret (for edge function to edge function calls)
+    const isInternalCall = internalSecret === config.credentialsEncryptionKey
+
+    if (!isInternalCall) {
+      if (!authHeader?.startsWith("Bearer ")) {
+        return json({ success: false, error: "Unauthorized: missing auth token" }, 401)
+      }
+      const token = authHeader.slice(7)
+
+      // Check if it's the service role key
+      const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY
+
+      // If not service role, verify as user JWT
+      if (!isServiceRole) {
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+        if (authError || !user) {
+          return json({ success: false, error: "Unauthorized: invalid token" }, 401)
+        }
+      }
     }
-    // Fallback to env var if DB lookup fails
+
+    // Get Resend credentials from DB
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    console.log("Fetching Resend credentials...")
+    const resendCreds = await getResendCredentials(supabase)
+    console.log("Resend credentials found:", resendCreds ? "yes" : "no")
+    const RESEND_API_KEY = resendCreds?.apiKey
     if (!RESEND_API_KEY) {
-      RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
+      console.error("No Resend API key configured")
+      return json({ success: false, error: "RESEND_API_KEY is not configured" }, 500)
     }
-    if (!RESEND_API_KEY) return json({ success: false, error: "RESEND_API_KEY is not configured" }, 500)
+    console.log("Using Resend API key:", RESEND_API_KEY.substring(0, 8) + "...")
 
     const body = (await req.json()) as TemplatePayload
 
@@ -760,6 +782,7 @@ serve(async (req: Request) => {
     if (!html) return json({ success: false, error: "Missing email HTML content" }, 400)
 
     // Send email
+    console.log("Sending email via Resend:", { from, to: payload.to, template: tplName })
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -786,6 +809,7 @@ serve(async (req: Request) => {
     })
 
     const result = await res.json()
+    console.log("Resend response:", { status: res.status, ok: res.ok, result })
     if (!res.ok) {
       console.error("Resend error:", result)
       return json(

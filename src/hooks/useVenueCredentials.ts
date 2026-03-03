@@ -159,7 +159,35 @@ export function useVenueCredentials(venue: string | null, integrationType: Integ
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // The error context might contain a ReadableStream body - try to read it
+        let errorMsg = 'Unknown error';
+        const context = (error as { context?: { body?: ReadableStream | string } }).context;
+        if (context?.body) {
+          if (context.body instanceof ReadableStream) {
+            try {
+              const reader = context.body.getReader();
+              const { value } = await reader.read();
+              const text = new TextDecoder().decode(value);
+              const parsed = JSON.parse(text);
+              errorMsg = parsed.error || text;
+            } catch {
+              errorMsg = (error as { message?: string }).message || 'Function error';
+            }
+          } else {
+            try {
+              const parsed = JSON.parse(context.body);
+              errorMsg = parsed.error || context.body;
+            } catch {
+              errorMsg = context.body;
+            }
+          }
+        } else {
+          errorMsg = (error as { message?: string }).message || 'Function error';
+        }
+        console.error('Function error:', errorMsg);
+        throw new Error(errorMsg);
+      }
       if (!data?.success) throw new Error(data?.error || 'Failed to save credentials');
 
       await fetchStatus();

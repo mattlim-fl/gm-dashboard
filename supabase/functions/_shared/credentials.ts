@@ -7,10 +7,7 @@
  */
 
 import { encryptToken, decryptToken } from './crypto.ts'
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any
+import { config } from './config.ts'
 
 // Integration types
 export type IntegrationType = 'square' | 'xero' | 'gmail' | 'resend'
@@ -109,11 +106,7 @@ interface SupabaseClient {
  * Get encryption key from environment
  */
 function getEncryptionKey(): string {
-  const key = Deno.env.get('CREDENTIALS_ENCRYPTION_KEY') || Deno.env.get('TOKEN_ENCRYPTION_KEY')
-  if (!key) {
-    throw new Error('CREDENTIALS_ENCRYPTION_KEY or TOKEN_ENCRYPTION_KEY environment variable is required')
-  }
-  return key
+  return config.credentialsEncryptionKey
 }
 
 /**
@@ -253,30 +246,81 @@ export async function saveCredentials<T extends CredentialData>(
       return { success: false, error: `Unknown integration type: ${integrationType}` }
     }
 
-    const upsertData = {
-      ...scopeData,
-      integration_type: integrationType,
-      credentials_encrypted: encrypted,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-      updated_by: userId || null,
-      verification_status: 'pending',
+    // Check if record already exists - need to handle NULL values properly
+    let existingId: string | null = null
+
+    if (integrationType === 'gmail') {
+      // Per-venue: match on venue + integration_type
+      const { data } = await supabase
+        .from('venue_api_credentials')
+        .select('id')
+        .eq('venue', scopeData.venue)
+        .eq('integration_type', integrationType)
+        .maybeSingle()
+      existingId = (data as { id: string } | null)?.id || null
+    } else if (integrationType === 'square' || integrationType === 'xero') {
+      // Per-org: match on org_id + integration_type where venue IS NULL
+      const { data } = await supabase
+        .from('venue_api_credentials')
+        .select('id')
+        .is('venue', null)
+        .eq('organization_id', scopeData.organization_id!)
+        .eq('integration_type', integrationType)
+        .maybeSingle()
+      existingId = (data as { id: string } | null)?.id || null
+    } else if (integrationType === 'resend') {
+      // Global: match on integration_type where venue AND org_id are NULL
+      const { data } = await supabase
+        .from('venue_api_credentials')
+        .select('id')
+        .is('venue', null)
+        .is('organization_id', null)
+        .eq('integration_type', 'resend')
+        .maybeSingle()
+      existingId = (data as { id: string } | null)?.id || null
     }
 
-    // Try to update existing record first
-    const coalesceVenue = scopeData.venue || ''
-    const coalesceOrg = scopeData.organization_id || ''
+    if (existingId) {
+      // Update existing record
+      const updateData = {
+        credentials_encrypted: encrypted,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+        updated_by: userId || null,
+        verification_status: 'pending',
+      }
 
-    // Use upsert with the unique constraint
-    const { error } = await supabase
-      .from('venue_api_credentials')
-      .upsert(upsertData, {
-        onConflict: 'COALESCE(venue, \'\'), COALESCE(organization_id, \'\'), integration_type'
-      })
+      const { error } = await supabase
+        .from('venue_api_credentials')
+        .update(updateData)
+        .eq('id', existingId)
 
-    if (error) {
-      console.error('Failed to save credentials:', error)
-      return { success: false, error: String((error as { message?: string }).message || error) }
+      if (error) {
+        console.error('Failed to update credentials:', error)
+        return { success: false, error: String((error as { message?: string }).message || error) }
+      }
+    } else {
+      // Insert new record
+      const insertData = {
+        ...scopeData,
+        integration_type: integrationType,
+        credentials_encrypted: encrypted,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: userId || null,
+        updated_by: userId || null,
+        verification_status: 'pending',
+      }
+
+      const { error } = await supabase
+        .from('venue_api_credentials')
+        .insert(insertData)
+
+      if (error) {
+        console.error('Failed to insert credentials:', error)
+        return { success: false, error: String((error as { message?: string }).message || error) }
+      }
     }
 
     return { success: true }
@@ -342,7 +386,7 @@ export async function updateVerificationStatus(
 /**
  * Get Square access token and location ID
  * Square access_token is per-organization (one Square account per org)
- * Square location_id is per-venue (stored in square_locations table)
+ * Square location_id is per-venue (stored in square_locations table with venue column)
  */
 export async function getSquareCredentials(
   supabase: SupabaseClient,
@@ -350,44 +394,28 @@ export async function getSquareCredentials(
 ): Promise<{ accessToken: string; locationId: string } | null> {
   // Get access token from org-level credentials
   const dbCreds = await getCredentials<SquareCredentials>(supabase, venue, 'square')
-  let accessToken: string | null = dbCreds?.access_token || null
-
-  // Fall back to env vars for access token
-  if (!accessToken) {
-    accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN') || Deno.env.get('SQUARE_PRODUCTION_ACCESS_TOKEN') || null
-    if (accessToken) {
-      console.log('Using Square access token from environment variables (fallback)')
-    }
-  }
-
-  if (!accessToken) {
+  if (!dbCreds?.access_token) {
+    console.warn(`No Square credentials found for venue: ${venue}`)
     return null
   }
 
-  // Get location ID from square_locations table for this venue
-  const { data: location, error } = await supabase
+  // Get location ID from square_locations table using venue column
+  const { data: location } = await supabase
     .from('square_locations')
     .select('square_location_id')
-    .eq('location_name', venue)
+    .eq('venue', venue)
+    .eq('location_type', 'bar')  // Only get bar locations for venue lookups
     .eq('is_active', true)
     .single()
 
-  let locationId = (location as { square_location_id: string } | null)?.square_location_id || null
-
-  // Fall back to env var for location ID
-  if (!locationId) {
-    locationId = Deno.env.get('SQUARE_LOCATION_ID') || null
-    if (locationId) {
-      console.log('Using Square location ID from environment variables (fallback)')
-    }
-  }
+  const locationId = (location as { square_location_id: string } | null)?.square_location_id || null
 
   if (!locationId) {
     console.warn(`No Square location found for venue: ${venue}`)
     return null
   }
 
-  return { accessToken, locationId }
+  return { accessToken: dbCreds.access_token, locationId }
 }
 
 /**
@@ -409,12 +437,7 @@ export async function getSquareCredentialsByOrg(
 
     const data = result.data as CredentialRow | null
     if (result.error || !data || !data.is_active) {
-      // Fall back to env vars
-      const accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN') || Deno.env.get('SQUARE_PRODUCTION_ACCESS_TOKEN')
-      if (accessToken) {
-        console.log('Using Square credentials from environment variables (fallback)')
-        return { accessToken }
-      }
+      console.warn(`No Square credentials found for organization: ${organizationId}`)
       return null
     }
 
@@ -424,19 +447,13 @@ export async function getSquareCredentialsByOrg(
     return { accessToken: creds.access_token }
   } catch (err) {
     console.error('Error fetching Square credentials by org:', err)
-    // Fall back to env vars
-    const accessToken = Deno.env.get('SQUARE_ACCESS_TOKEN') || Deno.env.get('SQUARE_PRODUCTION_ACCESS_TOKEN')
-    if (accessToken) {
-      console.log('Using Square credentials from environment variables (fallback)')
-      return { accessToken }
-    }
     return null
   }
 }
 
 /**
  * Map a Square location ID to a venue name
- * Location IDs are stored in square_locations table with location_name (venue)
+ * Returns the venue code (manor, hippie, daisy) or NULL for shared locations (door)
  */
 export async function getVenueForLocation(
   supabase: SupabaseClient,
@@ -444,12 +461,37 @@ export async function getVenueForLocation(
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('square_locations')
-    .select('location_name')
+    .select('venue, location_type')
     .eq('square_location_id', locationId)
     .single()
 
   if (error || !data) return null
-  return (data as { location_name: string }).location_name
+  const location = data as { venue: string | null; location_type: string }
+  // Return venue if set, otherwise return location_type for shared locations (e.g., "door")
+  return location.venue || location.location_type
+}
+
+/**
+ * Get location details by Square location ID
+ * Returns full location info including venue, type, and display name
+ */
+export async function getLocationDetails(
+  supabase: SupabaseClient,
+  locationId: string
+): Promise<{ venue: string | null; locationType: string; locationName: string } | null> {
+  const { data, error } = await supabase
+    .from('square_locations')
+    .select('venue, location_type, location_name')
+    .eq('square_location_id', locationId)
+    .single()
+
+  if (error || !data) return null
+  const location = data as { venue: string | null; location_type: string; location_name: string }
+  return {
+    venue: location.venue,
+    locationType: location.location_type,
+    locationName: location.location_name,
+  }
 }
 
 /**
@@ -465,28 +507,20 @@ export async function getOrganizationForLocation(
 }
 
 /**
- * Get Resend credentials with env var fallback
+ * Get Resend credentials from database
  */
 export async function getResendCredentials(
   supabase: SupabaseClient
 ): Promise<{ apiKey: string; fromEmail?: string } | null> {
-  // Try DB first
   const dbCreds = await getCredentials<ResendCredentials>(supabase, null, 'resend')
-  if (dbCreds) {
-    return {
-      apiKey: dbCreds.api_key,
-      fromEmail: dbCreds.from_email,
-    }
+  if (!dbCreds) {
+    console.warn('No Resend credentials found in database')
+    return null
   }
-
-  // Fall back to env vars
-  const apiKey = Deno.env.get('RESEND_API_KEY')
-  if (apiKey) {
-    console.log('Using Resend credentials from environment variables (fallback)')
-    return { apiKey }
+  return {
+    apiKey: dbCreds.api_key,
+    fromEmail: dbCreds.from_email,
   }
-
-  return null
 }
 
 /**

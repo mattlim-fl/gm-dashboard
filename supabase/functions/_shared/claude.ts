@@ -4,10 +4,7 @@
  */
 
 import { withRetry, RetryOptions } from "./retry.ts";
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any;
+import { config, isAnthropicConfigured } from "./config.ts";
 
 // Model constants
 export const CLAUDE_MODELS = {
@@ -64,7 +61,7 @@ export interface DraftResult {
  * Get the Anthropic API key from environment
  */
 function getApiKey(): string {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const apiKey = config.anthropicApiKey;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY environment variable is not set");
   }
@@ -313,10 +310,5 @@ LATEST MESSAGE TO REPLY TO:
  * Check if the API key is configured
  */
 export function isConfigured(): boolean {
-  try {
-    getApiKey();
-    return true;
-  } catch {
-    return false;
-  }
+  return isAnthropicConfigured();
 }

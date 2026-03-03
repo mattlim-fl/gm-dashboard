@@ -17,10 +17,7 @@ import {
   updateVerificationStatus,
 } from "../_shared/credentials.ts";
 import { encryptToken } from "../_shared/crypto.ts";
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any;
+import { config, isXeroConfigured } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -131,17 +128,13 @@ serve(async (req: Request) => {
   const url = new URL(req.url);
   const path = url.pathname.split("/").pop();
 
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const APP_URL = Deno.env.get("APP_URL") || "http://localhost:5173";
-  const XERO_CLIENT_ID = Deno.env.get("XERO_CLIENT_ID");
-  const XERO_CLIENT_SECRET = Deno.env.get("XERO_CLIENT_SECRET");
+  const SUPABASE_URL = config.supabaseUrl;
+  const SUPABASE_SERVICE_ROLE_KEY = config.supabaseServiceKey;
+  const APP_URL = config.appUrl;
+  const XERO_CLIENT_ID = config.xeroClientId;
+  const XERO_CLIENT_SECRET = config.xeroClientSecret;
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json({ error: "Supabase credentials not configured" }, 500);
-  }
-
-  if (!XERO_CLIENT_ID || !XERO_CLIENT_SECRET) {
+  if (!isXeroConfigured()) {
     return json({ error: "Xero OAuth credentials not configured" }, 500);
   }
 

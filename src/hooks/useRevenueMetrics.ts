@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/utils/currencyUtils";
 import { findSaturdayInRange, getSameSaturdayLastYear } from "@/lib/saturday-utils";
@@ -188,45 +188,33 @@ const calculateRollingFromWeeklyRPC = async (
 };
 
 export function useRevenueMetrics() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchRevenueData = async () => {
-    try {
-      setIsLoading(true);
-      
+  const query = useQuery({
+    queryKey: ['revenue-metrics'],
+    queryFn: async (): Promise<DashboardData> => {
       // Dashboard stats always use ALL venues (no filtering)
       const venueFilter = null;
-      
+
       // Use RPC approach for ALL periods - same as revenue chart
       const [weeklyData, monthlyData, yearlyData] = await Promise.all([
         calculateRollingFromWeeklyRPC(7, venueFilter),    // Use weekly RPC for 7 days
-        calculateRollingFromWeeklyRPC(28, venueFilter),   // Use weekly RPC for 28 days  
+        calculateRollingFromWeeklyRPC(28, venueFilter),   // Use weekly RPC for 28 days
         calculateRollingFromWeeklyRPC(365, venueFilter)   // Use weekly RPC for 365 days
       ]);
 
-      setDashboardData({
+      return {
         weekly: weeklyData,
         monthly: monthlyData,
         yearly: yearlyData
-      });
-    } catch (error) {
-      // Error fetching revenue data - silently fail
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRevenueData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Intentionally run only on mount - fetchRevenueData reference changes on every render
-  }, []);
+      };
+    },
+    staleTime: 1000 * 60 * 5,  // 5 minutes - data doesn't change frequently
+    gcTime: 1000 * 60 * 30,    // 30 minutes - keep in cache
+  });
 
   return {
-    dashboardData,
-    isLoading,
-    refetch: fetchRevenueData,
+    dashboardData: query.data ?? null,
+    isLoading: query.isLoading,
+    refetch: query.refetch,
   };
 }
 

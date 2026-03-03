@@ -13,14 +13,13 @@ const EnvSchema = z.object({
   API_CRON_SECRET: z.string().optional(),
 
   // Credentials encryption (for venue_api_credentials)
-  CREDENTIALS_ENCRYPTION_KEY: z.string().min(16).optional(),
+  CREDENTIALS_ENCRYPTION_KEY: z.string().min(16),
 
   // Xero OAuth
   XERO_CLIENT_ID: z.string().min(1),
   XERO_CLIENT_SECRET: z.string().min(1),
   XERO_REDIRECT_URI: z.string().url(),
   XERO_SCOPES: z.string().min(1),
-  XERO_TOKEN_ENCRYPTION_KEY: z.string().min(16), // Fallback for CREDENTIALS_ENCRYPTION_KEY
 });
 
 export const env = EnvSchema.parse(process.env);

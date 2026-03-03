@@ -8,10 +8,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1";
 import { saveCredentials, IntegrationType } from "../_shared/credentials.ts";
-
-// Minimal declaration for Deno global
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Deno: any;
+import { config } from "../_shared/config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,14 +60,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return json({ error: "Supabase credentials not configured" }, 500);
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
 
     const adminCheck = await requireAdmin(req, supabase);
     if (!adminCheck.ok) return adminCheck.response;
@@ -94,9 +84,9 @@ serve(async (req: Request) => {
 
     // Validate required fields per integration type
     if (integrationType === "square") {
-      if (!credentials.access_token || !credentials.location_id) {
+      if (!credentials.access_token) {
         return json(
-          { error: "Square credentials require access_token and location_id" },
+          { error: "Square credentials require access_token" },
           400
         );
       }
@@ -106,6 +96,8 @@ serve(async (req: Request) => {
       }
     }
 
+    console.log(`Saving credentials for ${integrationType}, venue: ${venue}`);
+
     const result = await saveCredentials(
       supabase,
       venue || null,
@@ -114,7 +106,10 @@ serve(async (req: Request) => {
       adminCheck.userId
     );
 
+    console.log(`Save result:`, result);
+
     if (!result.success) {
+      console.error(`Save failed: ${result.error}`);
       return json({ success: false, error: result.error }, 400);
     }
 

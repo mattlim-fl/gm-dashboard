@@ -453,23 +453,38 @@ Remember: Return ONLY HTML code, no markdown formatting or explanations.`
   }
 }
 
-async function sendEmail(supabase: any, to: string, subject: string, html: string): Promise<boolean> {
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: {
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('Missing Supabase credentials for send-email')
+      return false
+    }
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         to,
         subject,
         html,
         from: 'GM Dashboard <phil@manorleederville.com>',
         template: EMAIL_TEMPLATE, // Prevent triggering venue-confirmation internal notification
-      },
+      }),
     })
 
-    if (error) {
-      console.error('Error sending email:', error)
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '')
+      console.error('Error sending email:', res.status, errorText)
       return false
     }
 
+    const data = await res.json()
     return data?.success === true
   } catch (error) {
     console.error('Error invoking send-email function:', error)
@@ -603,7 +618,7 @@ serve(async (req: Request) => {
 
       for (const email of notificationSettings.recipient_emails) {
         console.log(`Sending email to ${email}...`)
-        const success = await sendEmail(supabase, email, subject, emailHtml)
+        const success = await sendEmail(email, subject, emailHtml)
         emailResults.push({ recipient: email, success })
         
         await logNotification(
