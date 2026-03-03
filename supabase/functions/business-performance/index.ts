@@ -470,15 +470,12 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const previousRevenue = previousRevenueCents / 100
   const yearAgoRevenue = yearAgoRevenueCents / 100
 
-  // P&L data from Xero is already in dollars GST-exclusive
-  const currentXeroRevenue = currentPnl?.totals?.revenue || 0
-  const previousXeroRevenue = previousPnl?.totals?.revenue || 0
-  const yearAgoXeroRevenue = yearAgoPnl?.totals?.revenue || 0
-
-  // For display, prefer Xero revenue if available
-  const displayCurrentRevenue = currentXeroRevenue > 0 ? currentXeroRevenue : currentRevenue
-  const displayPreviousRevenue = previousXeroRevenue > 0 ? previousXeroRevenue : previousRevenue
-  const displayYearAgoRevenue = yearAgoXeroRevenue > 0 ? yearAgoXeroRevenue : yearAgoRevenue
+  // Always use Square revenue for display metrics
+  // Square is the authoritative source for revenue; Xero P&L may return incomplete data
+  // Xero is only used for expense categories (wages, COGS, security)
+  const displayCurrentRevenue = currentRevenue
+  const displayPreviousRevenue = previousRevenue
+  const displayYearAgoRevenue = yearAgoRevenue
 
   const currentWages = currentPnl?.categories?.wages || 0
   const currentCogs = currentPnl?.categories?.cogs || 0
@@ -496,11 +493,9 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
   const validWeeks = avgWeekData.filter(w => w.pnl || w.metrics.revenue > 0)
   const weekCount = validWeeks.length || 1
 
-  // Average revenue (prefer Xero, fallback to Square)
+  // Always use Square revenue for average (consistent with display metrics)
   const avgRevenue = validWeeks.reduce((sum, w) => {
-    const xeroRev = w.pnl?.totals?.revenue || 0
-    const squareRev = w.metrics.revenue / 100
-    return sum + (xeroRev > 0 ? xeroRev : squareRev)
+    return sum + (w.metrics.revenue / 100)
   }, 0) / weekCount
 
   const avgWages = validWeeks.reduce((sum, w) => sum + (w.pnl?.categories?.wages || 0), 0) / weekCount
@@ -935,23 +930,38 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string): Promis
   }
 }
 
-async function sendEmail(supabase: any, to: string, subject: string, html: string): Promise<boolean> {
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   try {
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: {
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('Missing Supabase credentials for send-email')
+      return false
+    }
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         to,
         subject,
         html,
         from: 'GM Dashboard <phil@manorleederville.com>',
         template: EMAIL_TEMPLATE,
-      },
+      }),
     })
 
-    if (error) {
-      console.error('Error sending email:', error)
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '')
+      console.error('Error sending email:', res.status, errorText)
       return false
     }
 
+    const data = await res.json()
     return data?.success === true
   } catch (error) {
     console.error('Error invoking send-email function:', error)
@@ -1085,7 +1095,7 @@ serve(async (req: Request) => {
 
       for (const email of notificationSettings.recipient_emails) {
         console.log(`Sending email to ${email}...`)
-        const success = await sendEmail(supabase, email, subject, emailHtml)
+        const success = await sendEmail(email, subject, emailHtml)
         emailResults.push({ recipient: email, success })
         
         await logNotification(
