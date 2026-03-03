@@ -452,6 +452,102 @@ curl -sS -X POST \
 
 ---
 
+### 11. list-catalog
+
+**Endpoint:** `GET /list-catalog`
+
+**Description:** List Square catalog items for a venue.
+
+**Query Parameters:**
+- `venue` (required): Venue key (`manor` or `hippie`)
+
+**Response:**
+```json
+{
+  "success": true,
+  "items": [
+    {
+      "id": "item-id",
+      "name": "Item Name",
+      "type": "ITEM",
+      "variations": []
+    }
+  ]
+}
+```
+
+---
+
+### 12. weekly-summary
+
+**Endpoint:** `POST /weekly-summary`
+
+**Description:** Generate and send weekly summary notifications.
+
+**Authentication:** Invoked by Supabase cron (internal) or service role key
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Weekly summary sent",
+  "venues": ["manor", "hippie"]
+}
+```
+
+---
+
+### 13. check-credentials-status
+
+**Endpoint:** `POST /check-credentials-status`
+
+**Description:** Check the status of stored API credentials for a venue.
+
+**Request Body:**
+```json
+{
+  "venue": "manor",
+  "integration_type": "square"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "verified",
+  "last_verified_at": "2026-03-01T10:00:00Z"
+}
+```
+
+---
+
+### 14. update-cron-schedule
+
+**Endpoint:** `POST /update-cron-schedule`
+
+**Description:** Update the schedule for cron jobs (e.g., notification timing).
+
+**Authentication:** Requires admin role
+
+**Request Body:**
+```json
+{
+  "job_name": "trade-report",
+  "schedule": "0 9 * * 0"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Schedule updated"
+}
+```
+
+---
+
 ## Error Handling
 
 All functions return consistent error responses:

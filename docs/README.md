@@ -4,19 +4,19 @@
 
 **New to project?**
 1. `/README.md` - Setup and overview
-2. `.cursor/rules/gm-dashboard.mdc` - Development guidelines
+2. `/CLAUDE.md` - Development guidelines and coding patterns
 3. `docs/technical/architecture-overview.md` - System architecture
 
 **Building features?**
 1. `docs/IMPLEMENTATION_STATUS.md` - What's done/planned
 2. `docs/api-runbook.md` - Runtime API surface (Netlify Functions)
 3. `docs/edge-functions.md` - Supabase Edge Functions catalog
-3. `docs/features/` - Feature-specific docs
+4. `docs/features/` - Feature-specific docs
 
 ## Essential Documentation
 
 ### Core Technical
-- **`.cursor/rules/gm-dashboard.mdc`** ⭐ - AI coding guidelines, conventions, patterns
+- **`/CLAUDE.md`** ⭐ - AI coding guidelines, conventions, patterns
 - **`technical/architecture-overview.md`** ⭐ - Complete system architecture, DB schema, data flows
 - **`api-runbook.md`** ⭐ - Netlify API operations guide (frontend runtime endpoints)
 - **`edge-functions.md`** ⭐ - Supabase Edge Functions catalog (integration reference)
@@ -65,7 +65,7 @@ docs/
 ## Documentation by Task
 
 **Understand system:** `technical/architecture-overview.md`
-**Create edge function:** `edge-functions.md` + `.cursor/rules/gm-dashboard.mdc`
+**Create edge function:** `edge-functions.md` + `/CLAUDE.md`
 **Work with database:** `technical/architecture-overview.md` (schema) + `RLS_POLICIES.md`
 **Implement security:** `features/rbac-system.md` + `RLS_POLICIES.md`
 **Work with occasions:** `features/occasions-system.md`

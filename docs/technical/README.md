@@ -37,7 +37,8 @@ This directory contains all technical documentation for the application includin
 - **UI Components**: Shadcn/UI, Radix UI
 - **State Management**: React Query, React Hook Form
 - **Build Tools**: Vite, ESLint, TypeScript
-- **Hosting**: Lovable Platform
+- **Backend**: Supabase (PostgreSQL, Edge Functions, Auth)
+- **Hosting**: Netlify (frontend), Supabase (backend)
 
 ## Development Workflow
 

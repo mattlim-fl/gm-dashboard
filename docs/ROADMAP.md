@@ -8,8 +8,8 @@ This roadmap outlines the phased development of the GM Dashboard system, designe
 
 ## Phase 1: Financial & Inbound Control
 
-**Timeline:** Now → mid-February  
-**Status:** Mostly built — focus on hardening and embedding  
+**Timeline:** Q1 2026 (Completed)
+**Status:** ✅ Complete — hardening and embedding done
 **Goal:** Remove manual reporting work and reduce weekly cognitive load
 
 ### A. Venue Performance & Financial Reporting
@@ -62,7 +62,7 @@ This roadmap outlines the phased development of the GM Dashboard system, designe
 
 ## Phase 2: Venue Operations & Control
 
-**Timeline:** mid-February → March  
+**Timeline:** Q1-Q2 2026 (In Progress)
 **Goal:** Remove ongoing admin drag without removing ownership
 
 ### A. Inventory Intelligence
@@ -108,7 +108,7 @@ This roadmap outlines the phased development of the GM Dashboard system, designe
 
 ## Phase 3: Role Systemisation & Scale Layer
 
-**Timeline:** Late March  
+**Timeline:** Q2 2026 (Planned)
 **Goal:** Make roles survive people leaving — create institutional memory
 
 ### Capabilities

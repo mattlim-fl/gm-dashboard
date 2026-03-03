@@ -24,6 +24,9 @@
 ```bash
 npm run dev              # Start dev server
 npm run build            # Build for production
+npm run test             # Run frontend tests (Vitest)
+npm run test:run         # Run frontend tests once
+npm run test:coverage    # Run frontend tests with coverage
 deno task test           # Run edge function tests (from supabase/functions/)
 npx supabase functions deploy <name>  # Deploy edge function
 npx supabase db push     # Apply database migrations
@@ -75,6 +78,7 @@ Edge functions share common utilities to avoid code duplication:
 
 | Module | Purpose |
 |--------|---------|
+| `config.ts` | **Centralized environment configuration** - use this instead of inline `Deno.env.get()` |
 | `crypto.ts` | HMAC-SHA256, AES-256-GCM encryption, secure random code generation |
 | `credentials.ts` | Per-venue/org/global API credential management with encryption |
 | `square.ts` | Square API helpers (payments, refunds, orders) with retry logic |
@@ -87,12 +91,53 @@ Edge functions share common utilities to avoid code duplication:
 
 ### Usage in Edge Functions
 ```typescript
+// Centralized config (use this instead of Deno.env.get)
+import { config } from "../_shared/config.ts"
+const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey)
+
+// API credentials from database
+import { getSquareCredentials, getResendCredentials } from "../_shared/credentials.ts"
+const squareCreds = await getSquareCredentials(supabase, venue)
+const resendCreds = await getResendCredentials(supabase)
+
+// Other utilities
 import { chargeSquare, refundSquarePayment } from "../_shared/square.ts"
 import { generateSecureCode, encryptToken } from "../_shared/crypto.ts"
 import { withRetry } from "../_shared/retry.ts"
 import { PaymentError, errorResponse } from "../_shared/errors.ts"
 import { getSameSaturdayLastYear, findSaturdayInRange } from "../_shared/saturday-utils.ts"
-import { getSquareCredentials, getResendCredentials } from "../_shared/credentials.ts"
+```
+
+### Centralized Config (`config.ts`)
+
+Edge functions should use the centralized config module instead of inline `Deno.env.get()` calls:
+
+```typescript
+import { config, isXeroConfigured, isGmailConfigured } from "../_shared/config.ts"
+
+// Supabase (auto-injected by runtime)
+config.supabaseUrl          // SUPABASE_URL
+config.supabaseServiceKey   // SUPABASE_SERVICE_ROLE_KEY
+config.supabaseAnonKey      // SUPABASE_ANON_KEY (optional)
+
+// App settings
+config.appUrl               // APP_URL (default: http://localhost:5173)
+config.allowedOrigins       // ALLOWED_ORIGINS (parsed from comma-separated)
+config.guestListSecret      // GUEST_LIST_SECRET
+
+// Encryption
+config.credentialsEncryptionKey  // CREDENTIALS_ENCRYPTION_KEY (required)
+
+// OAuth credentials (for checking if configured)
+config.xeroClientId         // XERO_CLIENT_ID
+config.xeroClientSecret     // XERO_CLIENT_SECRET
+config.gmailClientId        // GMAIL_CLIENT_ID
+config.gmailClientSecret    // GMAIL_CLIENT_SECRET
+
+// API keys
+config.anthropicApiKey      // ANTHROPIC_API_KEY
+config.openaiApiKey         // OPENAI_API_KEY
+config.whatsappApiKey       // WHATSAPP_BUSINESS_API_KEY
 ```
 
 ### API Credentials (`credentials.ts`)
@@ -101,8 +146,8 @@ API credentials are stored encrypted in `venue_api_credentials` with flexible sc
 
 | Scope | Integration | Description |
 |-------|-------------|-------------|
-| **Per-venue** | Square, Gmail | Each venue has its own credentials |
-| **Per-organization** | Xero | Grouped venues share one (e.g., Manor+Hippie share Noxfolk's Xero) |
+| **Per-venue** | Gmail | Each venue has its own inbox |
+| **Per-organization** | Square, Xero | Grouped venues share one (e.g., Manor+Hippie share Noxfolk's Square/Xero) |
 | **Global** | Resend | Single account for all venues |
 
 **Organization mapping:**
@@ -111,17 +156,17 @@ API credentials are stored encrypted in `venue_api_credentials` with flexible sc
 
 **Key functions:**
 ```typescript
-// Get credentials with env var fallback
+// Get credentials from database (no env var fallbacks)
 const squareCreds = await getSquareCredentials(supabase, venue)
 const resendCreds = await getResendCredentials(supabase)
 const xeroCreds = await getXeroCredentials(supabase, venue)  // resolves to org-level
 const gmailCreds = await getGmailCredentials(supabase, venue)
 
 // Save credentials (encrypts automatically)
-await saveCredentials(supabase, venue, 'square', { access_token, location_id })
+await saveCredentials(supabase, venue, 'square', { access_token })
 ```
 
-**Fallback behavior:** If DB lookup fails, functions fall back to environment variables (`SQUARE_ACCESS_TOKEN`, `RESEND_API_KEY`, etc.) for backwards compatibility.
+**Note:** Credentials must be configured in the database via Settings → API Integrations. There are no environment variable fallbacks.
 
 ### Saturday Numbering (YoY Comparisons)
 
@@ -181,16 +226,26 @@ Deno.test("description of test", async () => {
 |----------|---------|
 | `send-email` | Email notifications (booking confirmations, reminders) |
 | `karaoke-availability` | Check booth availability |
-| `karaoke-pay-and-book` | Process karaoke booking with payment |
+| `karaoke-holds` | Create/release temporary holds during booking checkout |
+| `karaoke-book` | Create karaoke booking (staff use) |
+| `karaoke-pay-and-book` | Process karaoke booking with payment (customer-facing) |
 | `ticket-pay-and-book` | Process ticket purchases |
-| `trade-report` | Weekly trade report notifications |
-| `business-performance` | Weekly P&L notifications |
+| `venue-config-api` | Return venue and area configuration |
+| `sync-and-transform` | Sync Square payments and transform to revenue events |
+| `sync-scheduler` | Scheduled trigger for automatic Square sync |
+| `square-sync-backfill` | Backfill historical Square payment data |
+| `list-catalog` | List Square catalog items |
+| `trade-report` | Weekly trade report notifications (Sunday) |
+| `weekly-summary` | Weekly summary notifications |
+| `business-performance` | Weekly P&L notifications (Wednesday) |
 | `email-agent-scheduler` | Cron-triggered poller for email agent |
 | `email-agent-process` | Main email processing orchestrator |
 | `email-agent-oauth` | Gmail OAuth callback handler |
 | `save-credentials` | Save encrypted API credentials to database |
+| `check-credentials-status` | Check status of stored credentials |
 | `test-credentials` | Test API credential connectivity |
 | `xero-oauth` | Xero OAuth callback handler |
+| `update-cron-schedule` | Update cron job schedules |
 
 ## Testing Email Templates
 
@@ -213,17 +268,37 @@ Go to **Settings → API Integrations tab** to manage API credentials:
 ### Global Credentials
 - **Resend**: API key for email delivery (single account for all venues)
 
-### Required Environment Variables
+### Environment Variables
 
-For OAuth flows to work, these must be set in Supabase Edge Function secrets:
+#### Supabase Edge Function Secrets
+Set these in Supabase Dashboard → Edge Functions → Secrets:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `CREDENTIALS_ENCRYPTION_KEY` | **Yes** | AES-256 key (64-char hex) for encrypting stored credentials |
+| `APP_URL` | No | App base URL for OAuth redirects (default: http://localhost:5173) |
+| `XERO_CLIENT_ID` | For Xero | Xero OAuth app client ID |
+| `XERO_CLIENT_SECRET` | For Xero | Xero OAuth app client secret |
+| `GMAIL_CLIENT_ID` | For Gmail | Google Cloud OAuth client ID |
+| `GMAIL_CLIENT_SECRET` | For Gmail | Google Cloud OAuth client secret |
+| `ANTHROPIC_API_KEY` | For email agent | Claude API key for email classification |
+| `GUEST_LIST_SECRET` | No | Secret for signing guest list tokens |
+
+#### Netlify Environment Variables (API Server)
+Set these in Netlify Dashboard → Site settings → Environment variables:
 
 | Variable | Purpose |
 |----------|---------|
-| `CREDENTIALS_ENCRYPTION_KEY` | AES-256 key for encrypting stored credentials (or reuse `TOKEN_ENCRYPTION_KEY`) |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+| `CREDENTIALS_ENCRYPTION_KEY` | Same as Supabase secrets |
 | `XERO_CLIENT_ID` | Xero OAuth app client ID |
 | `XERO_CLIENT_SECRET` | Xero OAuth app client secret |
+| `XERO_REDIRECT_URI` | OAuth callback URL |
+| `API_ALLOWED_ORIGINS` | CORS allowed origins |
 
-Existing env vars (`SQUARE_ACCESS_TOKEN`, `RESEND_API_KEY`, etc.) continue to work as fallbacks.
+**Important:** Square and Resend credentials are stored in the database, not as environment variables. Configure them via Settings → API Integrations.
 
 ---
 
@@ -390,10 +465,19 @@ deno task test:claude    # claude.test.ts
 deno task test:gmail     # gmail.test.ts
 ```
 
-### Frontend
-**No frontend tests exist.** If adding tests in future:
-- Location: `src/{feature}/__tests__/{Component}.test.tsx`
-- Priority: Business-critical paths (booking creation, payments, revenue calculations)
+### Frontend (Vitest)
+Frontend tests use Vitest with React Testing Library:
+```bash
+npm run test             # Watch mode
+npm run test:run         # Run once
+npm run test:coverage    # Run with coverage report
+```
+
+**Test locations:**
+- `src/lib/__tests__/` - Utility function tests (e.g., `saturday-utils.test.ts`)
+- `src/{feature}/__tests__/{Component}.test.tsx` - Component tests
+
+**Priority for new tests:** Business-critical paths (booking creation, payments, revenue calculations)
 
 ---
 

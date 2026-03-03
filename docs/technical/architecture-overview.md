@@ -58,7 +58,7 @@ GM Dashboard is a modern web application built on a serverless architecture with
 
 **Framework & Build**
 - React 18.3 with TypeScript 5.5
-- Vite 7.1 for fast builds and HMR
+- Vite 5.x for fast builds and HMR
 - React Router v6 for client-side routing
 
 **State Management**
@@ -687,12 +687,12 @@ supabase functions serve
 ### Testing Strategy
 
 **Current:**
-- Manual testing of critical paths
+- Frontend unit tests with Vitest (`npm run test`)
+- Edge function tests with Deno (`deno task test`)
 - Database migration testing locally
 - Edge function testing via curl/Postman
 
 **Future:**
-- Unit tests for business logic
 - Integration tests for edge functions
 - E2E tests for critical user flows
 - Visual regression tests

@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Last Updated:** February 18, 2026
+**Last Updated:** March 3, 2026
 
 ## Completed Features ✅
 
@@ -74,7 +74,7 @@
 
 ## Recently Refactored 🔄
 
-### Square Integration (July 2024)
+### Square Integration (July 2025)
 - Consolidated sync functions
 - Unified revenue page
 - Removed debug/test components
@@ -92,9 +92,10 @@ These documented APIs don't exist (use edge functions instead):
 ## Technical Debt
 
 ### Testing
-- ⚠️ No frontend automated tests (unit, integration, E2E)
+- ✅ Frontend unit tests with Vitest (`npm run test`) - `src/lib/__tests__/`
 - ✅ Edge Function shared utilities have Deno tests in `supabase/functions/_shared/__tests__/`
-- **Plan:** Add frontend tests for critical flows + minimal E2E smoke tests
+- ⚠️ No integration or E2E tests yet
+- **Plan:** Add E2E smoke tests for critical flows
 
 ### Performance
 - ⚠️ Large booking lists need pagination
@@ -113,9 +114,15 @@ These documented APIs don't exist (use edge functions instead):
 
 ## Migration Status
 
-**Latest:** `20251212103000-karaoke-overnight-bookings.sql`
+**Latest:** `20260210000000_fix_attendance_exclude_canceled.sql`
 
-**Recent:**
+**Recent (2026):**
+- Fix attendance exclude canceled bookings
+- Fix attendance exclude re-entry
+- Fix custom amount detection
+- Add photo albums public policy
+
+**Recent (2025):**
 - Overnight karaoke bookings
 - Organizer flag for occasions
 - RBAC v2 financial RLS
