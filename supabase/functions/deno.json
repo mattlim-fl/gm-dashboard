@@ -5,7 +5,13 @@
     "test:retry": "deno test --allow-env _shared/__tests__/retry.test.ts",
     "test:square": "deno test --allow-env --allow-net _shared/__tests__/square.test.ts",
     "test:claude": "deno test --allow-env --allow-net _shared/__tests__/claude.test.ts",
-    "test:gmail": "deno test --allow-env --allow-net _shared/__tests__/gmail.test.ts"
+    "test:gmail": "deno test --allow-env --allow-net _shared/__tests__/gmail.test.ts",
+    "test:credentials": "deno test --allow-env _shared/__tests__/credentials.test.ts",
+    "test:errors": "deno test --allow-env _shared/__tests__/errors.test.ts",
+    "test:config": "deno test --allow-env _shared/__tests__/config.test.ts",
+    "test:karaoke-pay": "deno test --allow-env --allow-net _shared/__tests__/karaoke-pay-and-book.test.ts",
+    "test:ticket-pay": "deno test --allow-env --allow-net _shared/__tests__/ticket-pay-and-book.test.ts",
+    "test:send-email": "deno test --allow-env _shared/__tests__/send-email.test.ts"
   },
   "imports": {
     "@std/": "https://deno.land/std@0.168.0/"
