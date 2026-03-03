@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { customerService, CustomerInsert, CustomerUpdate, CustomerFilters } from '@/services/customerService';
 import { useToast } from '@/hooks/use-toast';
 
@@ -6,6 +6,7 @@ export const useCustomers = (filters?: CustomerFilters) => {
   return useQuery({
     queryKey: ['customers', filters],
     queryFn: () => customerService.getCustomers(filters),
+    placeholderData: keepPreviousData,
   });
 };
 

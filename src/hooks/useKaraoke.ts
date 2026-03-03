@@ -1,9 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { karaokeService } from '@/services/karaokeService';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  KaraokeBoothRow, 
-  KaraokeBoothInsert, 
+import {
+  KaraokeBoothRow,
+  KaraokeBoothInsert,
   KaraokeBoothUpdate,
   KaraokeBookingFormData,
   KaraokeBookingFilters,
@@ -20,6 +20,7 @@ export const useKaraokeBooths = (filters?: KaraokeBoothFilters) => {
     queryKey: ['karaoke-booths', filters],
     queryFn: () => karaokeService.getKaraokeBooths(filters),
     staleTime: 1000 * 60 * 5, // 5 minutes
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -31,6 +32,7 @@ export const useKaraokeBooth = (id: string) => {
     queryKey: ['karaoke-booth', id],
     queryFn: () => karaokeService.getKaraokeBooth(id),
     enabled: !!id,
+    placeholderData: keepPreviousData,
     retry: (failureCount, error) => {
       if (error.message.includes('migration') || error.message.includes('table not found')) {
         return false;
@@ -216,6 +218,7 @@ export const useBoothAvailability = (boothId: string, date: string) => {
     queryFn: () => karaokeService.getBoothAvailability(boothId, date),
     enabled: !!boothId && !!date,
     staleTime: 1000 * 60 * 2, // 2 minutes
+    placeholderData: keepPreviousData,
     retry: (failureCount, error) => {
       if (error.message.includes('migration') || error.message.includes('table not found')) {
         return false;
@@ -328,6 +331,7 @@ export const useKaraokeAvailability = (params: { boothId?: string; venue?: 'mano
     }),
     enabled: (!!params.bookingDate && (!!params.boothId || !!params.venue)) || params.action === 'boothsForSlot',
     staleTime: 1000 * 60 * 2, // 2 minutes - availability can be slightly stale
+    placeholderData: keepPreviousData,
   });
 };
 

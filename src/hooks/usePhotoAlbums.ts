@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   PhotoAlbum,
   PhotoAlbumImage,
@@ -29,6 +29,7 @@ export function useAlbums(venue: Venue, includeArchived = false) {
     queryKey: [ALBUMS_KEY, venue, includeArchived],
     queryFn: () => getAlbums(venue, includeArchived),
     staleTime: 1000 * 60 * 5, // 5 minutes - albums rarely change
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -40,6 +41,7 @@ export function useAlbum(albumId: string | undefined) {
     queryKey: [ALBUMS_KEY, albumId],
     queryFn: () => (albumId ? getAlbumById(albumId) : null),
     enabled: !!albumId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -52,6 +54,7 @@ export function useAlbumPhotos(albumId: string | undefined, includeArchived = fa
     queryFn: () => (albumId ? getAlbumPhotos(albumId, includeArchived) : []),
     enabled: !!albumId,
     staleTime: 1000 * 60 * 5, // 5 minutes - photos rarely change
+    placeholderData: keepPreviousData,
   });
 }
 

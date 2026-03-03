@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { bookingService, CreateBookingData, BookingFilters } from '@/services/bookingService';
 import { useToast } from '@/hooks/use-toast';
 import { useVenue } from '@/contexts/VenueContext';
@@ -18,6 +18,7 @@ export const useBookings = (filters?: BookingFilters) => {
     queryKey: ['bookings', effectiveFilters, selectedVenue],
     queryFn: () => bookingService.getBookings(effectiveFilters),
     staleTime: 1000 * 60 * 5, // 5 minutes
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -26,6 +27,7 @@ export const useBooking = (id: string) => {
     queryKey: ['booking', id],
     queryFn: () => bookingService.getBooking(id),
     enabled: !!id,
+    placeholderData: keepPreviousData,
   });
 };
 

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { memberService, MemberInsert, MemberUpdate, MemberFilters, Venue, MemberWithCheckin } from '@/services/memberService';
 import { useToast } from '@/hooks/use-toast';
 import { useVenue, Venue as VenueType } from '@/contexts/VenueContext';
@@ -19,6 +19,7 @@ export const useMembers = (filters?: MemberFilters) => {
   return useQuery({
     queryKey: ['members', effectiveFilters, selectedVenue],
     queryFn: () => memberService.fetchMembers(effectiveFilters),
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -27,6 +28,7 @@ export const useMember = (id: string) => {
     queryKey: ['members', id],
     queryFn: () => memberService.fetchMemberById(id),
     enabled: !!id,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -35,6 +37,7 @@ export const useSearchMembers = (query: string) => {
     queryKey: ['members', 'search', query],
     queryFn: () => memberService.searchMembers(query),
     enabled: query.length >= 2,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -118,6 +121,7 @@ export const useMembersWithCheckins = (date: string, venue?: Venue) => {
     queryKey: ['members', 'checkins', date, effectiveVenue, selectedVenue],
     queryFn: () => memberService.fetchMembersWithCheckins(date, effectiveVenue),
     enabled: !!date,
+    placeholderData: keepPreviousData,
   });
 };
 
