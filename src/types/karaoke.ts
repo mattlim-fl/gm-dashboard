@@ -4,7 +4,7 @@
 import type { Venue, VenueSelection } from './venue';
 
 /** Karaoke is only available at manor and hippie venues */
-export type KaraokeVenue = Exclude<Venue, 'daisy'>;
+export type KaraokeVenue = Exclude<Venue, 'daisys'>;
 export type KaraokeVenueSelection = KaraokeVenue | 'all';
 
 export interface KaraokeBoothRow {

@@ -30,7 +30,7 @@ import { useCreateMember } from "@/hooks/useMembers";
 import { Venue } from "@/services/memberService";
 
 const addMemberSchema = z.object({
-  venue: z.enum(["manor", "hippie", "daisy"], {
+  venue: z.enum(["manor", "hippie", "daisys"], {
     required_error: "Please select a venue",
   }),
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -106,7 +106,7 @@ export function AddMemberDialog({ isOpen, onClose, defaultVenue }: AddMemberDial
                     <SelectContent>
                       <SelectItem value="manor">Manor</SelectItem>
                       <SelectItem value="hippie">Hippie Club</SelectItem>
-                      <SelectItem value="daisy">Daisy's Social Club</SelectItem>
+                      <SelectItem value="daisys">Daisy's Social Club</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

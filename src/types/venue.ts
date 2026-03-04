@@ -3,21 +3,21 @@
  * Import from here instead of defining venue types locally
  */
 
-export type Venue = 'manor' | 'hippie' | 'daisy';
+export type Venue = 'manor' | 'hippie' | 'daisys';
 export type VenueSelection = Venue | 'all';
 
-export const ALL_VENUES: Venue[] = ['manor', 'hippie', 'daisy'];
+export const ALL_VENUES: Venue[] = ['manor', 'hippie', 'daisys'];
 
 export const VENUE_LABELS: Record<Venue, string> = {
   manor: 'Manor',
   hippie: 'Hippie Club',
-  daisy: 'Daisy',
+  daisys: "Daisy's",
 };
 
 export const VENUE_OPTIONS = [
   { value: 'manor' as const, label: 'Manor' },
   { value: 'hippie' as const, label: 'Hippie Club' },
-  { value: 'daisy' as const, label: 'Daisy' },
+  { value: 'daisys' as const, label: "Daisy's" },
 ] as const;
 
 /**

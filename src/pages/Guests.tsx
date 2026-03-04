@@ -453,7 +453,7 @@ export default function Guests() {
                     <SelectItem value="all">All Venues</SelectItem>
                     <SelectItem value="manor">Manor</SelectItem>
                     <SelectItem value="hippie">Hippie</SelectItem>
-                    <SelectItem value="daisy">Daisy's</SelectItem>
+                    <SelectItem value="daisys">Daisy's</SelectItem>
                   </SelectContent>
                 </Select>
 

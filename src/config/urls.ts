@@ -11,13 +11,13 @@ import type { Venue } from '@/types/venue';
 export const VENUE_WEBSITE_URLS: Record<Venue, string> = {
   manor: 'https://manorleederville.com',
   hippie: 'https://hippieclub.com',
-  daisy: 'https://daisyssocialclub.com',
+  daisys: 'https://daisyssocialclub.com',
 };
 
 /**
  * Local development project names for each venue UI
  */
-const VENUE_DEV_PROJECT_NAMES: Record<Exclude<Venue, 'daisy'>, string> = {
+const VENUE_DEV_PROJECT_NAMES: Record<Exclude<Venue, 'daisys'>, string> = {
   manor: 'manor-perth-nightlife-ui',
   hippie: 'hippie-club-ui',
 };
@@ -35,8 +35,8 @@ function isLocalDev(): boolean {
  * In dev mode, returns localhost URL for the venue's UI project
  */
 export function getVenueWebsiteUrl(venue: Venue): string {
-  if (isLocalDev() && venue !== 'daisy') {
-    const devProjectName = VENUE_DEV_PROJECT_NAMES[venue as Exclude<Venue, 'daisy'>];
+  if (isLocalDev() && venue !== 'daisys') {
+    const devProjectName = VENUE_DEV_PROJECT_NAMES[venue as Exclude<Venue, 'daisys'>];
     return window.location.origin.replace('gm-dashboard', devProjectName);
   }
   return VENUE_WEBSITE_URLS[venue];
