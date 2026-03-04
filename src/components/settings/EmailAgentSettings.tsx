@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -54,21 +55,84 @@ interface EmailCategory {
   auto_draft: boolean;
 }
 
+// Fixed venue for PoC
+const EMAIL_AGENT_VENUE = 'hippie';
+
+async function fetchEmailAgentData(venue: string) {
+  // Fetch config
+  const { data: configData, error: configError } = await supabase
+    .from('email_agent_config')
+    .select('*')
+    .eq('venue', venue)
+    .single();
+
+  if (configError && configError.code !== 'PGRST116') {
+    throw configError;
+  }
+
+  // Fetch categories
+  const { data: catData, error: catError } = await supabase
+    .from('email_categories')
+    .select('*')
+    .order('priority', { ascending: false });
+
+  if (catError) throw catError;
+
+  // Fetch recent logs
+  const { data: logData, error: logError } = await supabase
+    .from('email_agent_logs')
+    .select('*')
+    .eq('venue', venue)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (logError) throw logError;
+
+  return {
+    config: configData as EmailAgentConfig | null,
+    categories: (catData || []) as EmailCategory[],
+    recentLogs: (logData || []) as EmailAgentLog[],
+  };
+}
+
 export function EmailAgentSettings() {
+  const queryClient = useQueryClient();
   const [config, setConfig] = useState<EmailAgentConfig | null>(null);
   const [categories, setCategories] = useState<EmailCategory[]>([]);
   const [recentLogs, setRecentLogs] = useState<EmailAgentLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected' | 'error'>('checking');
   const { toast } = useToast();
 
-  // Fixed venue for PoC
-  const venue = 'hippie';
+  const venue = EMAIL_AGENT_VENUE;
+
+  const { isLoading: loading } = useQuery({
+    queryKey: ['email-agent-data', venue],
+    queryFn: () => fetchEmailAgentData(venue),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    select: (data) => {
+      // Sync to local state for editing
+      if (data.config !== undefined && config === null) {
+        setConfig(data.config);
+        if (data.config?.gmail_refresh_token_encrypted) {
+          setConnectionStatus('connected');
+        } else {
+          setConnectionStatus('disconnected');
+        }
+      }
+      if (data.categories.length > 0 && categories.length === 0) {
+        setCategories(data.categories);
+      }
+      if (data.recentLogs.length > 0 && recentLogs.length === 0) {
+        setRecentLogs(data.recentLogs);
+      }
+      return data;
+    },
+  });
 
   useEffect(() => {
-    fetchData();
     checkUrlParams();
   }, []);
 
@@ -97,59 +161,8 @@ export function EmailAgentSettings() {
     }
   }
 
-  async function fetchData() {
-    try {
-      setLoading(true);
-
-      // Fetch config
-      const { data: configData, error: configError } = await supabase
-        .from('email_agent_config')
-        .select('*')
-        .eq('venue', venue)
-        .single();
-
-      if (configError && configError.code !== 'PGRST116') {
-        throw configError;
-      }
-
-      // Fetch categories
-      const { data: catData, error: catError } = await supabase
-        .from('email_categories')
-        .select('*')
-        .order('priority', { ascending: false });
-
-      if (catError) throw catError;
-
-      // Fetch recent logs
-      const { data: logData, error: logError } = await supabase
-        .from('email_agent_logs')
-        .select('*')
-        .eq('venue', venue)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (logError) throw logError;
-
-      setConfig(configData || null);
-      setCategories(catData || []);
-      setRecentLogs(logData || []);
-
-      // Check connection status
-      if (configData?.gmail_refresh_token_encrypted) {
-        setConnectionStatus('connected');
-      } else {
-        setConnectionStatus('disconnected');
-      }
-    } catch (error) {
-      console.error('Error fetching email agent data:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load email agent settings',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
+  function fetchData() {
+    queryClient.invalidateQueries({ queryKey: ['email-agent-data', venue] });
   }
 
   async function toggleEnabled(enabled: boolean) {

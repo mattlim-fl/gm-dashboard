@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,29 +20,22 @@ export const BenchmarkSettings = () => {
     cogs: 0,
     security: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadBenchmarks();
-  }, []);
-
-  const loadBenchmarks = async () => {
-    try {
-      setIsLoading(true);
-      const data = await benchmarkService.getBenchmarks();
-      setBenchmarks(data);
-    } catch (_error) {
-      toast({
-        title: "Error",
-        description: "Failed to load benchmark settings.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { isLoading } = useQuery({
+    queryKey: ['benchmarks'],
+    queryFn: () => benchmarkService.getBenchmarks(),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    select: (data) => {
+      // Sync to local state for editing
+      if (data && (benchmarks.wages === 0 && benchmarks.cogs === 0 && benchmarks.security === 0)) {
+        setBenchmarks(data);
+      }
+      return data;
+    },
+  });
 
   const handleSave = async () => {
     try {
