@@ -58,47 +58,18 @@ interface CredentialRow {
   oauth_expires_at: string | null
 }
 
-// Supabase client interface (minimal)
+// Supabase client interface (minimal but comprehensive)
+// deno-lint-ignore no-explicit-any
+type QueryResult = Promise<{ data: any; error: any }>
+// deno-lint-ignore no-explicit-any
+type QueryBuilder = any
+
 interface SupabaseClient {
   from: (table: string) => {
-    select: (columns: string) => {
-      eq: (column: string, value: string | null) => {
-        is: (column: string, value: null) => {
-          single: () => Promise<{ data: unknown; error: unknown }>
-        }
-        single: () => Promise<{ data: unknown; error: unknown }>
-        maybeSingle: () => Promise<{ data: unknown; error: unknown }>
-      }
-      is: (column: string, value: null) => {
-        is: (column: string, value: null) => {
-          eq: (column: string, value: string) => {
-            single: () => Promise<{ data: unknown; error: unknown }>
-          }
-        }
-        eq: (column: string, value: string) => {
-          single: () => Promise<{ data: unknown; error: unknown }>
-        }
-      }
-      single: () => Promise<{ data: unknown; error: unknown }>
-    }
-    upsert: (data: unknown, options?: { onConflict?: string }) => Promise<{ data: unknown; error: unknown }>
-    update: (data: unknown) => {
-      eq: (column: string, value: string | null) => {
-        eq: (column: string, value: string) => Promise<{ data: unknown; error: unknown }>
-        is: (column: string, value: null) => {
-          eq: (column: string, value: string) => Promise<{ data: unknown; error: unknown }>
-        }
-      }
-      is: (column: string, value: null) => {
-        eq: (column: string, value: string) => {
-          is: (column: string, value: null) => Promise<{ data: unknown; error: unknown }>
-        }
-        is: (column: string, value: null) => {
-          eq: (column: string, value: string) => Promise<{ data: unknown; error: unknown }>
-        }
-      }
-    }
-    insert: (data: unknown) => Promise<{ data: unknown; error: unknown }>
+    select: (columns: string) => QueryBuilder
+    upsert: (data: unknown, options?: { onConflict?: string }) => QueryResult
+    update: (data: unknown) => QueryBuilder
+    insert: (data: unknown) => QueryResult
   }
 }
 
@@ -544,22 +515,112 @@ export async function getXeroCredentials(
 }
 
 /**
- * Get a valid Xero access token for a venue
- * This refreshes the token automatically since access tokens are short-lived (30 min)
- * Returns both the access token and tenant ID needed for API calls
+ * Get the credential ID for a venue + integration type
  */
-export async function getXeroAccessToken(
+async function getCredentialId(
   supabase: SupabaseClient,
-  venue: string
-): Promise<{ accessToken: string; tenantId: string } | null> {
-  const creds = await getXeroCredentials(supabase, venue)
-  if (!creds) {
-    console.log(`No Xero credentials found for venue: ${venue}`)
+  venue: string,
+  integrationType: IntegrationType
+): Promise<string | null> {
+  if (integrationType === 'xero' || integrationType === 'square') {
+    const orgId = await getOrganizationForVenue(supabase, venue)
+    if (!orgId) return null
+
+    const { data } = await supabase
+      .from('venue_api_credentials')
+      .select('id')
+      .is('venue', null)
+      .eq('organization_id', orgId)
+      .eq('integration_type', integrationType)
+      .single()
+
+    return (data as { id: string } | null)?.id || null
+  }
+  return null
+}
+
+/**
+ * Get cached access token from oauth_token_cache
+ */
+async function getCachedAccessToken(
+  supabase: SupabaseClient,
+  credentialId: string
+): Promise<{ access_token: string; expires_at: string } | null> {
+  const { data, error } = await supabase
+    .from('oauth_token_cache')
+    .select('access_token_encrypted, expires_at')
+    .eq('credential_id', credentialId)
+    .single()
+
+  if (error || !data) return null
+
+  const row = data as { access_token_encrypted: string; expires_at: string }
+  try {
+    const encryptionKey = getEncryptionKey()
+    const accessToken = await decryptToken(row.access_token_encrypted, encryptionKey)
+    return { access_token: accessToken, expires_at: row.expires_at }
+  } catch {
+    console.error('Failed to decrypt cached access token')
     return null
+  }
+}
+
+/**
+ * Sleep helper for retry logic
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Refresh Xero token with optimistic locking to prevent race conditions
+ */
+async function refreshXeroTokenWithLock(
+  supabase: SupabaseClient,
+  venue: string,
+  credentialId: string,
+  creds: XeroCredentials
+): Promise<{ accessToken: string; tenantId: string } | null> {
+  const now = new Date()
+  const lockUntil = new Date(now.getTime() + 30000).toISOString() // 30 second lock
+
+  // Try to acquire lock using UPDATE with WHERE condition
+  // First check if there's an existing cache entry
+  const { data: existingCache } = await supabase
+    .from('oauth_token_cache')
+    .select('id, refresh_lock_until')
+    .eq('credential_id', credentialId)
+    .single()
+
+  if (existingCache) {
+    const cache = existingCache as { id: string; refresh_lock_until: string | null }
+    const lockExpiry = cache.refresh_lock_until ? new Date(cache.refresh_lock_until) : null
+
+    // If lock is held by another request, wait and retry
+    if (lockExpiry && lockExpiry > now) {
+      console.log('Xero token refresh locked by another request, waiting...')
+      await sleep(1500) // Wait 1.5 seconds
+      // Recursively call getXeroAccessToken which will check cache again
+      return getXeroAccessToken(supabase, venue)
+    }
+
+    // Try to acquire lock
+    const { error: lockError } = await supabase
+      .from('oauth_token_cache')
+      .update({ refresh_lock_until: lockUntil })
+      .eq('id', cache.id)
+      .or(`refresh_lock_until.is.null,refresh_lock_until.lt.${now.toISOString()}`)
+
+    if (lockError) {
+      console.log('Failed to acquire lock, another request may have it')
+      await sleep(1000)
+      return getXeroAccessToken(supabase, venue)
+    }
   }
 
   try {
-    // Refresh the access token
+    // We have the lock (or no cache entry exists yet) - do the refresh
+    console.log('Refreshing Xero access token...')
     const credentials = btoa(`${creds.client_id}:${creds.client_secret}`)
     const response = await fetch('https://identity.xero.com/connect/token', {
       method: 'POST',
@@ -576,12 +637,38 @@ export async function getXeroAccessToken(
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Xero token refresh failed:', response.status, errorText)
+      // Release lock on failure
+      if (existingCache) {
+        await supabase
+          .from('oauth_token_cache')
+          .update({ refresh_lock_until: null })
+          .eq('credential_id', credentialId)
+      }
       return null
     }
 
     const tokenData = await response.json()
 
-    // Update the stored refresh token if it changed (Xero rotates refresh tokens)
+    // Calculate expiry (Xero tokens are typically 30 minutes)
+    const expiresInMs = (tokenData.expires_in || 1800) * 1000
+    const expiresAt = new Date(Date.now() + expiresInMs).toISOString()
+
+    // Save access token to cache
+    const encryptionKey = getEncryptionKey()
+    const encryptedToken = await encryptToken(tokenData.access_token, encryptionKey)
+    await supabase
+      .from('oauth_token_cache')
+      .upsert({
+        credential_id: credentialId,
+        access_token_encrypted: encryptedToken,
+        expires_at: expiresAt,
+        refresh_lock_until: null, // Release lock
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'credential_id'
+      })
+
+    // Update refresh token if it was rotated
     if (tokenData.refresh_token && tokenData.refresh_token !== creds.refresh_token) {
       console.log('Xero refresh token rotated, updating stored credentials')
       await saveCredentials(supabase, venue, 'xero', {
@@ -592,12 +679,66 @@ export async function getXeroAccessToken(
       })
     }
 
+    console.log('Xero token refreshed and cached successfully')
     return {
       accessToken: tokenData.access_token,
       tenantId: creds.tenant_id,
     }
   } catch (err) {
     console.error('Error refreshing Xero token:', err)
+    // Release lock on error
+    if (existingCache) {
+      await supabase
+        .from('oauth_token_cache')
+        .update({ refresh_lock_until: null })
+        .eq('credential_id', credentialId)
+    }
     return null
   }
+}
+
+/**
+ * Get a valid Xero access token for a venue
+ * Uses caching and database-level locking to prevent race conditions when
+ * multiple concurrent requests try to refresh tokens.
+ *
+ * Xero refresh tokens are single-use - each refresh returns a NEW refresh token
+ * and invalidates the old one. Without caching, concurrent requests would all
+ * try to refresh with the same (now invalid) refresh token.
+ */
+export async function getXeroAccessToken(
+  supabase: SupabaseClient,
+  venue: string
+): Promise<{ accessToken: string; tenantId: string } | null> {
+  const creds = await getXeroCredentials(supabase, venue)
+  if (!creds) {
+    console.log(`No Xero credentials found for venue: ${venue}`)
+    return null
+  }
+
+  // Get the credential ID for cache lookup
+  const credentialId = await getCredentialId(supabase, venue, 'xero')
+  if (!credentialId) {
+    console.log(`No credential ID found for Xero (venue: ${venue})`)
+    return null
+  }
+
+  // Check for cached, non-expired access token
+  const cached = await getCachedAccessToken(supabase, credentialId)
+  if (cached) {
+    const expiresAt = new Date(cached.expires_at)
+    const bufferTime = 60000 // 1 minute buffer
+
+    if (expiresAt.getTime() > Date.now() + bufferTime) {
+      // Token is still valid (with buffer)
+      console.log('Using cached Xero access token')
+      return {
+        accessToken: cached.access_token,
+        tenantId: creds.tenant_id,
+      }
+    }
+  }
+
+  // Token expired or not cached - refresh with locking
+  return refreshXeroTokenWithLock(supabase, venue, credentialId, creds)
 }
