@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAdmin } from '@/lib/permissions';
@@ -61,83 +62,78 @@ export interface AllCredentialsData {
   status: CredentialsStatus | null;
 }
 
+async function fetchAllCredentials(): Promise<AllCredentialsData> {
+  const [credResult, orgResult, venueOrgResult, locationsResult, statusResult] = await Promise.all([
+    supabase
+      .from('venue_api_credentials')
+      .select('*')
+      .order('integration_type', { ascending: true }),
+    supabase.from('organizations').select('*'),
+    supabase
+      .from('venue_organizations')
+      .select('venue, organization_id, organizations:organizations(id, name)'),
+    supabase
+      .from('square_locations')
+      .select('id, square_location_id, location_name, venue, location_type, is_active')
+      .order('location_name', { ascending: true }),
+    supabase.functions.invoke('check-credentials-status', {
+      method: 'POST',
+      body: {},
+    }),
+  ]);
+
+  if (credResult.error) throw credResult.error;
+  if (orgResult.error) throw orgResult.error;
+  if (venueOrgResult.error) throw venueOrgResult.error;
+  if (locationsResult.error) throw locationsResult.error;
+
+  // Status result might fail if function not deployed, handle gracefully
+  let status: CredentialsStatus | null = null;
+  if (statusResult.data?.success) {
+    status = statusResult.data.status;
+  } else if (statusResult.error) {
+    console.warn('Failed to fetch credentials status:', statusResult.error);
+  }
+
+  return {
+    credentials: (credResult.data || []) as CredentialRecord[],
+    organizations: (orgResult.data || []) as Organization[],
+    venueOrganizations: (venueOrgResult.data || []).map((vo) => ({
+      venue: vo.venue as Venue,
+      organization_id: vo.organization_id,
+      organization: vo.organizations as Organization | undefined,
+    })),
+    squareLocations: (locationsResult.data || []) as SquareLocation[],
+    status,
+  };
+}
+
 export function useAllCredentials() {
   const { role } = useAuth();
   const canManageIntegrations = isAdmin(role);
-  const [data, setData] = useState<AllCredentialsData>({
-    credentials: [],
-    organizations: [],
-    venueOrganizations: [],
-    squareLocations: [],
-    status: null,
+  const queryClient = useQueryClient();
+
+  const {
+    data = {
+      credentials: [],
+      organizations: [],
+      venueOrganizations: [],
+      squareLocations: [],
+      status: null,
+    },
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['all-credentials'],
+    queryFn: fetchAllCredentials,
+    enabled: canManageIntegrations,
+    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh, no refetch on navigation
+    gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache
   });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    if (!canManageIntegrations) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [credResult, orgResult, venueOrgResult, locationsResult, statusResult] = await Promise.all([
-        supabase
-          .from('venue_api_credentials')
-          .select('*')
-          .order('integration_type', { ascending: true }),
-        supabase.from('organizations').select('*'),
-        supabase
-          .from('venue_organizations')
-          .select('venue, organization_id, organizations:organizations(id, name)'),
-        supabase
-          .from('square_locations')
-          .select('id, square_location_id, location_name, venue, location_type, is_active')
-          .order('location_name', { ascending: true }),
-        supabase.functions.invoke('check-credentials-status', {
-          method: 'POST',
-          body: {},
-        }),
-      ]);
-
-      if (credResult.error) throw credResult.error;
-      if (orgResult.error) throw orgResult.error;
-      if (venueOrgResult.error) throw venueOrgResult.error;
-      if (locationsResult.error) throw locationsResult.error;
-
-      // Status result might fail if function not deployed, handle gracefully
-      let status: CredentialsStatus | null = null;
-      if (statusResult.data?.success) {
-        status = statusResult.data.status;
-      } else if (statusResult.error) {
-        console.warn('Failed to fetch credentials status:', statusResult.error);
-      }
-
-      setData({
-        credentials: (credResult.data || []) as CredentialRecord[],
-        organizations: (orgResult.data || []) as Organization[],
-        venueOrganizations: (venueOrgResult.data || []).map((vo) => ({
-          venue: vo.venue as Venue,
-          organization_id: vo.organization_id,
-          organization: vo.organizations as Organization | undefined,
-        })),
-        squareLocations: (locationsResult.data || []) as SquareLocation[],
-        status,
-      });
-    } catch (err) {
-      console.error('Error fetching credentials:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch credentials');
-    } finally {
-      setLoading(false);
-    }
-  }, [canManageIntegrations]);
-
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+  const refresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['all-credentials'] });
+  }, [queryClient]);
 
   // Helper to get credential for a specific venue/integration
   const getVenueCredential = (
@@ -229,9 +225,9 @@ export function useAllCredentials() {
 
   return {
     ...data,
-    loading,
-    error,
-    refresh: fetchAll,
+    loading: isLoading,
+    error: error instanceof Error ? error.message : error ? String(error) : null,
+    refresh,
     getVenueCredential,
     getGlobalCredential,
     getOrganizationForVenue,

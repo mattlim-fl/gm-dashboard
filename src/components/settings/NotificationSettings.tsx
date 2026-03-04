@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
@@ -13,10 +14,24 @@ import {
   type NotificationSettingsData,
 } from './notifications';
 
+async function fetchNotificationSettings() {
+  const { data, error } = await supabase
+    .from('notification_settings')
+    .select('*')
+    .in('notification_type', ['trade_report', 'business_performance']);
+
+  if (error) throw error;
+
+  return {
+    tradeReport: data?.find(s => s.notification_type === 'trade_report') || null,
+    businessPerf: data?.find(s => s.notification_type === 'business_performance') || null,
+  };
+}
+
 export function NotificationSettings() {
+  const queryClient = useQueryClient();
   const [tradeReportSettings, setTradeReportSettings] = useState<NotificationSettingsData | null>(null);
   const [businessPerfSettings, setBusinessPerfSettings] = useState<NotificationSettingsData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<{ tradeReport: boolean; businessPerf: boolean }>({
     tradeReport: false,
     businessPerf: false,
@@ -40,35 +55,25 @@ export function NotificationSettings() {
   const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  const { isLoading: loading } = useQuery({
+    queryKey: ['notification-settings'],
+    queryFn: fetchNotificationSettings,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    select: (data) => {
+      // Sync React Query data to local state for editing
+      if (data.tradeReport && !tradeReportSettings) {
+        setTradeReportSettings(data.tradeReport);
+      }
+      if (data.businessPerf && !businessPerfSettings) {
+        setBusinessPerfSettings(data.businessPerf);
+      }
+      return data;
+    },
+  });
 
   async function fetchSettings() {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('notification_settings')
-        .select('*')
-        .in('notification_type', ['trade_report', 'business_performance']);
-
-      if (error) throw error;
-
-      const tradeReport = data?.find(s => s.notification_type === 'trade_report') || null;
-      const businessPerf = data?.find(s => s.notification_type === 'business_performance') || null;
-
-      setTradeReportSettings(tradeReport);
-      setBusinessPerfSettings(businessPerf);
-    } catch (error) {
-      console.error('Error fetching notification settings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load notification settings',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
+    queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
   }
 
   async function saveSettings(type: 'trade_report' | 'business_performance') {

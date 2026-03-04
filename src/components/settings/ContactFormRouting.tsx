@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Plus, X, Mail, MessageSquare } from 'lucide-react';
+import { Loader2, Plus, X, MessageSquare } from 'lucide-react';
 import { ALL_VENUES, VENUE_LABELS } from '@/types/venue';
 import type { Venue } from '@/types/venue';
 
@@ -172,49 +173,46 @@ function CategoryCard({ settings, category, venue, onUpdate, onSave, saving }: C
   );
 }
 
+const NOTIFICATION_TYPES = VENUES.flatMap((venue) =>
+  CATEGORIES.map((cat) => `${venue.id}_contact_${cat.id}`)
+);
+
+async function fetchContactFormSettings() {
+  const { data, error } = await supabase
+    .from('notification_settings')
+    .select('id, notification_type, enabled, recipient_emails')
+    .in('notification_type', NOTIFICATION_TYPES);
+
+  if (error) throw error;
+
+  const settingsMap: Record<string, ContactNotificationSettings | null> = {};
+  NOTIFICATION_TYPES.forEach((type) => {
+    const found = data?.find((s) => s.notification_type === type);
+    settingsMap[type] = found || null;
+  });
+
+  return settingsMap;
+}
+
 export function ContactFormRouting() {
   const [settings, setSettings] = useState<Record<string, ContactNotificationSettings | null>>({});
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [activeVenue, setActiveVenue] = useState<Venue>('manor');
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
-    try {
-      setLoading(true);
-      const notificationTypes = VENUES.flatMap((venue) =>
-        CATEGORIES.map((cat) => `${venue.id}_contact_${cat.id}`)
-      );
-
-      const { data, error } = await supabase
-        .from('notification_settings')
-        .select('id, notification_type, enabled, recipient_emails')
-        .in('notification_type', notificationTypes);
-
-      if (error) throw error;
-
-      const settingsMap: Record<string, ContactNotificationSettings | null> = {};
-      notificationTypes.forEach((type) => {
-        const found = data?.find((s) => s.notification_type === type);
-        settingsMap[type] = found || null;
-      });
-
-      setSettings(settingsMap);
-    } catch (error) {
-      console.error('Error fetching contact form settings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load contact form routing settings',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { isLoading: loading } = useQuery({
+    queryKey: ['contact-form-settings'],
+    queryFn: fetchContactFormSettings,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    select: (data) => {
+      // Sync to local state for editing if not yet set
+      if (Object.keys(settings).length === 0 && Object.keys(data).length > 0) {
+        setSettings(data);
+      }
+      return data;
+    },
+  });
 
   async function saveSettings(notificationType: string) {
     const settingsToSave = settings[notificationType];
