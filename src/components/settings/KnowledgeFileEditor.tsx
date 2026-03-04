@@ -231,16 +231,6 @@ export function KnowledgeFileEditor({ venue }: KnowledgeFileEditorProps) {
     return cat?.display_name || categoryKey;
   }
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gm-primary-500" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <>
       {/* Editor Dialog */}
