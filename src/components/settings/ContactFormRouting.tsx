@@ -200,7 +200,7 @@ export function ContactFormRouting() {
   const [activeVenue, setActiveVenue] = useState<Venue>('manor');
   const { toast } = useToast();
 
-  const { isLoading: loading } = useQuery({
+  useQuery({
     queryKey: ['contact-form-settings'],
     queryFn: fetchContactFormSettings,
     staleTime: 5 * 60 * 1000,
@@ -252,16 +252,6 @@ export function ContactFormRouting() {
       ...prev,
       [notificationType]: newSettings,
     }));
-  }
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gm-primary-500" />
-        </CardContent>
-      </Card>
-    );
   }
 
   return (

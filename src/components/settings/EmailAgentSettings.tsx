@@ -107,7 +107,7 @@ export function EmailAgentSettings() {
 
   const venue = EMAIL_AGENT_VENUE;
 
-  const { isLoading: loading } = useQuery({
+  useQuery({
     queryKey: ['email-agent-data', venue],
     queryFn: () => fetchEmailAgentData(venue),
     staleTime: 5 * 60 * 1000,
@@ -291,16 +291,6 @@ export function EmailAgentSettings() {
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
-  }
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gm-primary-500" />
-        </CardContent>
-      </Card>
-    );
   }
 
   return (

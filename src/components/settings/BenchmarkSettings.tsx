@@ -23,7 +23,7 @@ export const BenchmarkSettings = () => {
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  const { isLoading } = useQuery({
+  useQuery({
     queryKey: ['benchmarks'],
     queryFn: () => benchmarkService.getBenchmarks(),
     staleTime: 5 * 60 * 1000,
@@ -62,22 +62,6 @@ export const BenchmarkSettings = () => {
   };
 
   const totalBenchmark = benchmarks.wages + benchmarks.cogs + benchmarks.security;
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Cost Benchmarks</CardTitle>
-          <CardDescription>
-            Set target percentages for each cost category
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-center h-48">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-6">
