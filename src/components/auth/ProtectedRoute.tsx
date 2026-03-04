@@ -10,7 +10,9 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, accessAllowed } = useAuth();
 
-  if (loading) {
+  // Only show loading on initial mount when we don't know auth state yet
+  // Don't flash loading screen if user is already authenticated
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -27,7 +29,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/auth" replace />;
   }
 
-  if (!accessAllowed) {
+  // Don't block on accessAllowed loading - show content while checking
+  if (!loading && !accessAllowed) {
     return <AccessDenied />;
   }
 

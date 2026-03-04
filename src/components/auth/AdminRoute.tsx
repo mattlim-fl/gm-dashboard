@@ -10,7 +10,8 @@ interface AdminRouteProps {
 export function AdminRoute({ children }: AdminRouteProps) {
   const { role, loading, user } = useAuth();
 
-  if (loading) {
+  // Only show loading on initial mount when we don't know auth state yet
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -27,7 +28,8 @@ export function AdminRoute({ children }: AdminRouteProps) {
     return <Navigate to="/auth" replace />;
   }
 
-  if (!isAdmin(role)) {
+  // Don't block on role loading - only redirect if we know they're not admin
+  if (!loading && !isAdmin(role)) {
     return <Navigate to="/calendar" replace />;
   }
 
