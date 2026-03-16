@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
-import { buildAuthorizeUrl, exchangeCodeForToken, getConnections, getAccounts, getProfitAndLoss } from './client';
-import { env } from '../env';
+import { getAccounts, getProfitAndLoss } from './client';
 import { z } from 'zod';
 import { type Clients } from '../middleware/auth';
-import { getXeroAccessToken, getXeroCredentials, saveCredentials, XeroCredentials } from '../shared/credentials';
+import { getXeroAccessToken, getXeroCredentials } from '../shared/credentials';
 import { mapAccountToCategory } from './mapping';
 import type {
   XeroAccount,
@@ -20,64 +19,6 @@ export const xero = new Hono();
 // Default venue for Xero operations (uses organization-level credentials)
 // All venues in the same org share Xero credentials
 const DEFAULT_VENUE_FOR_XERO = 'manor';
-
-// Start OAuth consent
-xero.get('/connect', (c) => {
-  const venue = c.req.query('venue') || DEFAULT_VENUE_FOR_XERO;
-  // Encode venue in state for callback
-  const state = Buffer.from(JSON.stringify({ venue })).toString('base64');
-  const url = buildAuthorizeUrl(state);
-  console.log('[Xero] /connect authorize URL:', url);
-  console.log('[Xero] scopes:', env.XERO_SCOPES);
-  console.log('[Xero] redirect_uri:', env.XERO_REDIRECT_URI);
-  console.log('[Xero] venue:', venue);
-  return c.redirect(url, 302);
-});
-
-// OAuth callback: exchange code, fetch connections, store tokens
-xero.get('/callback', async (c) => {
-  const code = c.req.query('code');
-  const state = c.req.query('state');
-  if (!code) return c.json({ error: 'Missing code' }, 400);
-
-  // Decode venue from state
-  let venue = DEFAULT_VENUE_FOR_XERO;
-  if (state) {
-    try {
-      const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
-      venue = stateData.venue || DEFAULT_VENUE_FOR_XERO;
-    } catch {
-      console.warn('[Xero] Could not parse state, using default venue');
-    }
-  }
-
-  const token = await exchangeCodeForToken(code);
-  const connections = await getConnections(token.access_token);
-  if (!Array.isArray(connections) || connections.length === 0) {
-    return c.json({ error: 'No Xero connections found after auth' }, 400);
-  }
-  const primary = connections[0];
-  const tenantId = primary.tenantId;
-
-  // @ts-ignore
-  const { supabaseService } = c.get('clients') as Clients;
-
-  // Store credentials in the new venue_api_credentials system
-  const result = await saveCredentials<XeroCredentials>(supabaseService, venue, 'xero', {
-    client_id: env.XERO_CLIENT_ID,
-    client_secret: env.XERO_CLIENT_SECRET,
-    refresh_token: token.refresh_token,
-    tenant_id: tenantId,
-  });
-
-  if (!result.success) {
-    console.error('[Xero] Failed to save credentials:', result.error);
-    return c.json({ error: 'Failed to save credentials', detail: result.error }, 500);
-  }
-
-  console.log(`[Xero] Successfully connected for venue ${venue}`);
-  return c.html('<html><body><h3>Xero connected successfully.</h3><p>You can close this window.</p></body></html>');
-});
 
 // Fetch Accounts (trimmed)
 xero.get('/accounts', async (c) => {
