@@ -303,6 +303,9 @@ async function getCachedAccessToken(
   if (error || !data) return null;
 
   const row = data as { access_token_encrypted: string; expires_at: string };
+  if (!row.access_token_encrypted) {
+    return null; // Empty placeholder row from lock acquisition
+  }
   try {
     const accessToken = decryptToken(row.access_token_encrypted);
     return { access_token: accessToken, expires_at: row.expires_at };
@@ -320,53 +323,46 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Refresh Xero token with optimistic locking to prevent race conditions
+ * Refresh Xero token with optimistic locking to prevent race conditions.
+ * Uses atomic lock acquisition to ensure only one request refreshes at a time.
  */
 async function refreshXeroTokenWithLock(
   supabase: SupabaseClient,
   venue: string,
   credentialId: string,
-  creds: XeroCredentials
+  creds: XeroCredentials,
+  retryCount = 0
 ): Promise<{ accessToken: string; tenantId: string } | null> {
+  const MAX_RETRIES = 3;
+  if (retryCount >= MAX_RETRIES) {
+    console.error(`Xero token refresh exceeded max retries (${MAX_RETRIES})`);
+    return null;
+  }
+
   const now = new Date();
-  const lockUntil = new Date(now.getTime() + 30000).toISOString(); // 30 second lock
+  const lockUntil = new Date(now.getTime() + 30000); // 30 second lock
 
-  // Try to acquire lock using UPDATE with WHERE condition
-  // First check if there's an existing cache entry
-  const { data: existingCache } = await supabase
-    .from('oauth_token_cache')
-    .select('id, refresh_lock_until')
-    .eq('credential_id', credentialId)
-    .single();
+  // Atomically: ensure cache row exists + acquire lock if free/expired
+  const { data: lockAcquired, error: rpcError } = await supabase
+    .rpc('acquire_refresh_lock', {
+      p_credential_id: credentialId,
+      p_lock_until: lockUntil.toISOString(),
+    });
 
-  if (existingCache) {
-    const cache = existingCache as { id: string; refresh_lock_until: string | null };
-    const lockExpiry = cache.refresh_lock_until ? new Date(cache.refresh_lock_until) : null;
+  if (rpcError) {
+    console.error('Lock acquisition RPC error:', rpcError);
+    return null;
+  }
 
-    // If lock is held by another request, wait and retry
-    if (lockExpiry && lockExpiry > now) {
-      console.log('Xero token refresh locked by another request, waiting...');
-      await sleep(1500); // Wait 1.5 seconds
-      // Recursively call getXeroAccessToken which will check cache again
-      return getXeroAccessToken(supabase, venue);
-    }
-
-    // Try to acquire lock
-    const { error: lockError } = await supabase
-      .from('oauth_token_cache')
-      .update({ refresh_lock_until: lockUntil })
-      .eq('id', cache.id)
-      .or(`refresh_lock_until.is.null,refresh_lock_until.lt.${now.toISOString()}`);
-
-    if (lockError) {
-      console.log('Failed to acquire lock, another request may have it');
-      await sleep(1000);
-      return getXeroAccessToken(supabase, venue);
-    }
+  if (!lockAcquired) {
+    // Another request has the lock — wait and check cache
+    console.log('Xero token refresh locked by another request, waiting...');
+    await sleep(2000);
+    return getXeroAccessToken(supabase, venue, retryCount + 1);
   }
 
   try {
-    // We have the lock (or no cache entry exists yet) - do the refresh
+    // We have the lock - do the refresh
     console.log('Refreshing Xero access token...');
     const credentials = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64');
     const response = await fetch('https://identity.xero.com/connect/token', {
@@ -384,13 +380,27 @@ async function refreshXeroTokenWithLock(
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Xero token refresh failed:', response.status, errorText);
+
       // Release lock on failure
-      if (existingCache) {
-        await supabase
-          .from('oauth_token_cache')
-          .update({ refresh_lock_until: null })
-          .eq('credential_id', credentialId);
+      await supabase
+        .from('oauth_token_cache')
+        .update({ refresh_lock_until: null })
+        .eq('credential_id', credentialId);
+
+      // If invalid_grant, another request may have already rotated the token
+      if (response.status === 400 && errorText.includes('invalid_grant')) {
+        console.log('Got invalid_grant — checking if another request already refreshed');
+        await sleep(500);
+        const freshCached = await getCachedAccessToken(supabase, credentialId);
+        if (freshCached) {
+          const freshExpiry = new Date(freshCached.expires_at);
+          if (freshExpiry.getTime() > Date.now() + 60000) {
+            console.log('Found fresh cached token from another request');
+            return { accessToken: freshCached.access_token, tenantId: creds.tenant_id };
+          }
+        }
       }
+
       return null;
     }
 
@@ -400,7 +410,7 @@ async function refreshXeroTokenWithLock(
     const expiresInMs = (tokenData.expires_in || 1800) * 1000;
     const expiresAt = new Date(Date.now() + expiresInMs).toISOString();
 
-    // Save access token to cache
+    // Save access token to cache and release lock
     const encryptedToken = encryptToken(tokenData.access_token);
     await supabase
       .from('oauth_token_cache')
@@ -433,12 +443,10 @@ async function refreshXeroTokenWithLock(
   } catch (err) {
     console.error('Error refreshing Xero token:', err);
     // Release lock on error
-    if (existingCache) {
-      await supabase
-        .from('oauth_token_cache')
-        .update({ refresh_lock_until: null })
-        .eq('credential_id', credentialId);
-    }
+    await supabase
+      .from('oauth_token_cache')
+      .update({ refresh_lock_until: null })
+      .eq('credential_id', credentialId);
     return null;
   }
 }
@@ -454,7 +462,8 @@ async function refreshXeroTokenWithLock(
  */
 export async function getXeroAccessToken(
   supabase: SupabaseClient,
-  venue: string
+  venue: string,
+  retryCount = 0
 ): Promise<{ accessToken: string; tenantId: string } | null> {
   const creds = await getXeroCredentials(supabase, venue);
   if (!creds) {
@@ -486,5 +495,5 @@ export async function getXeroAccessToken(
   }
 
   // Token expired or not cached - refresh with locking
-  return refreshXeroTokenWithLock(supabase, venue, credentialId, creds);
+  return refreshXeroTokenWithLock(supabase, venue, credentialId, creds, retryCount);
 }
