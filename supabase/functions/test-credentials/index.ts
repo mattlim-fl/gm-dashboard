@@ -11,7 +11,7 @@ import {
   getSquareCredentials,
   getResendCredentials,
   getGmailCredentials,
-  getXeroCredentials,
+  getXeroAccessToken,
   updateVerificationStatus,
   IntegrationType,
 } from "../_shared/credentials.ts";
@@ -120,38 +120,21 @@ async function testGmail(refreshToken: string): Promise<{ success: boolean; mess
 }
 
 async function testXero(
-  clientId: string,
-  clientSecret: string,
-  refreshToken: string,
-  tenantId: string
+  supabase: any,
+  venue: string
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    // First refresh the access token
-    const tokenRes = await fetch("https://identity.xero.com/connect/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-    });
-
-    if (!tokenRes.ok) {
-      const body = await tokenRes.json().catch(() => ({}));
-      return { success: false, error: body?.error_description || "Token refresh failed" };
+    // Use getXeroAccessToken which handles locking and token rotation safely
+    const xeroAuth = await getXeroAccessToken(supabase, venue);
+    if (!xeroAuth) {
+      return { success: false, error: "Xero not connected" };
     }
 
-    const tokenData = await tokenRes.json();
-    const accessToken = tokenData.access_token;
-
-    // Test API access
+    // Test API access with the safely-refreshed token
     const orgRes = await fetch("https://api.xero.com/api.xro/2.0/Organisation", {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Xero-Tenant-Id": tenantId,
+        Authorization: `Bearer ${xeroAuth.accessToken}`,
+        "Xero-Tenant-Id": xeroAuth.tenantId,
         Accept: "application/json",
       },
     });
@@ -216,16 +199,7 @@ serve(async (req: Request) => {
       }
       result = await testGmail(creds.refresh_token);
     } else if (integrationType === "xero") {
-      const creds = await getXeroCredentials(supabase, venue);
-      if (!creds) {
-        return json({ success: false, error: "Xero credentials not configured" });
-      }
-      result = await testXero(
-        creds.client_id,
-        creds.client_secret,
-        creds.refresh_token,
-        creds.tenant_id
-      );
+      result = await testXero(supabase, venue);
     } else {
       return json({ error: "Unsupported integration type" }, 400);
     }

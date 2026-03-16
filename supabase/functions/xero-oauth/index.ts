@@ -13,10 +13,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1";
 import {
   saveCredentials,
-  getXeroCredentials,
+  getXeroAccessToken,
   updateVerificationStatus,
 } from "../_shared/credentials.ts";
-import { encryptToken } from "../_shared/crypto.ts";
 import { config, isXeroConfigured } from "../_shared/config.ts";
 
 const corsHeaders = {
@@ -296,38 +295,18 @@ serve(async (req: Request) => {
         return json({ error: "Invalid or missing venue" }, 400);
       }
 
-      // Get credentials
-      const creds = await getXeroCredentials(supabase, venue);
-      if (!creds) {
-        return json({ error: "Xero not connected" }, 400);
-      }
-
       try {
-        // Refresh access token
-        const tokenRes = await fetch(XERO_TOKEN_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Authorization: `Basic ${btoa(`${creds.client_id}:${creds.client_secret}`)}`,
-          },
-          body: new URLSearchParams({
-            grant_type: "refresh_token",
-            refresh_token: creds.refresh_token,
-          }),
-        });
-
-        if (!tokenRes.ok) {
-          const errorBody = await tokenRes.json().catch(() => ({}));
-          throw new Error(errorBody?.error_description || "Token refresh failed");
+        // Use getXeroAccessToken which handles locking and token rotation safely
+        const xeroAuth = await getXeroAccessToken(supabase, venue);
+        if (!xeroAuth) {
+          return json({ error: "Xero not connected" }, 400);
         }
 
-        const tokenData = await tokenRes.json();
-
-        // Test API access
+        // Test API access with the safely-refreshed token
         const orgRes = await fetch("https://api.xero.com/api.xro/2.0/Organisation", {
           headers: {
-            Authorization: `Bearer ${tokenData.access_token}`,
-            "Xero-Tenant-Id": creds.tenant_id,
+            Authorization: `Bearer ${xeroAuth.accessToken}`,
+            "Xero-Tenant-Id": xeroAuth.tenantId,
             Accept: "application/json",
           },
         });
@@ -338,14 +317,6 @@ serve(async (req: Request) => {
 
         const orgData = await orgRes.json();
         const orgName = orgData?.Organisations?.[0]?.Name || "Unknown";
-
-        // Update new refresh token if provided
-        if (tokenData.refresh_token && tokenData.refresh_token !== creds.refresh_token) {
-          await saveCredentials(supabase, venue, "xero", {
-            ...creds,
-            refresh_token: tokenData.refresh_token,
-          });
-        }
 
         await updateVerificationStatus(supabase, venue, "xero", "verified");
 
