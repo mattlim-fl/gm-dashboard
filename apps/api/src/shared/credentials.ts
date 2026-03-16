@@ -224,25 +224,74 @@ export async function saveCredentials<T extends CredentialData>(
       return { success: false, error: `Unknown integration type: ${integrationType}` };
     }
 
-    const upsertData = {
-      ...scopeData,
-      integration_type: integrationType,
-      credentials_encrypted: encrypted,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-      updated_by: userId || null,
-      verification_status: 'pending',
-    };
+    // Find existing record using NULL-safe queries (matches edge function pattern)
+    // Supabase JS onConflict doesn't support COALESCE expressions, so we
+    // explicitly check for existing records and update/insert accordingly.
+    let existingId: string | null = null;
 
-    const { error } = await supabase
-      .from('venue_api_credentials')
-      .upsert(upsertData, {
-        onConflict: "COALESCE(venue, ''), COALESCE(organization_id, ''), integration_type"
-      });
+    if (integrationType === 'gmail') {
+      const { data } = await supabase
+        .from('venue_api_credentials')
+        .select('id')
+        .eq('venue', scopeData.venue!)
+        .eq('integration_type', integrationType)
+        .maybeSingle();
+      existingId = (data as { id: string } | null)?.id || null;
+    } else if (integrationType === 'square' || integrationType === 'xero') {
+      const { data } = await supabase
+        .from('venue_api_credentials')
+        .select('id')
+        .is('venue', null)
+        .eq('organization_id', scopeData.organization_id!)
+        .eq('integration_type', integrationType)
+        .maybeSingle();
+      existingId = (data as { id: string } | null)?.id || null;
+    } else if (integrationType === 'resend') {
+      const { data } = await supabase
+        .from('venue_api_credentials')
+        .select('id')
+        .is('venue', null)
+        .is('organization_id', null)
+        .eq('integration_type', 'resend')
+        .maybeSingle();
+      existingId = (data as { id: string } | null)?.id || null;
+    }
 
-    if (error) {
-      console.error('Failed to save credentials:', error);
-      return { success: false, error: String((error as { message?: string }).message || error) };
+    if (existingId) {
+      const { error } = await supabase
+        .from('venue_api_credentials')
+        .update({
+          credentials_encrypted: encrypted,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+          updated_by: userId || null,
+          verification_status: 'pending',
+        })
+        .eq('id', existingId);
+
+      if (error) {
+        console.error('Failed to update credentials:', error);
+        return { success: false, error: String((error as { message?: string }).message || error) };
+      }
+    } else {
+      const { error } = await supabase
+        .from('venue_api_credentials')
+        .insert({
+          ...scopeData,
+          integration_type: integrationType,
+          credentials_encrypted: encrypted,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          created_by: userId || null,
+          updated_by: userId || null,
+          verification_status: 'pending',
+        });
+
+      if (error) {
+        console.error('Failed to insert credentials:', error);
+        return { success: false, error: String((error as { message?: string }).message || error) };
+      }
     }
 
     return { success: true };
