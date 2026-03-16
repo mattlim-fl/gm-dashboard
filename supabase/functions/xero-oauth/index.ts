@@ -230,6 +230,30 @@ serve(async (req: Request) => {
         );
       }
 
+      // Clear any poisoned oauth_token_cache entry from a previous invalid_grant.
+      // Look up the credential ID and delete the stale cache row so the new
+      // refresh token can be used immediately without hitting a cooldown lock.
+      const { data: venueOrg } = await supabase
+        .from("venue_organizations")
+        .select("organization_id")
+        .eq("venue", venue)
+        .single();
+      if (venueOrg) {
+        const { data: credRow } = await supabase
+          .from("venue_api_credentials")
+          .select("id")
+          .is("venue", null)
+          .eq("organization_id", venueOrg.organization_id)
+          .eq("integration_type", "xero")
+          .single();
+        if (credRow) {
+          await supabase
+            .from("oauth_token_cache")
+            .delete()
+            .eq("credential_id", credRow.id);
+        }
+      }
+
       // Update with OAuth expiry and verification status
       await updateVerificationStatus(supabase, venue, "xero", "verified");
 

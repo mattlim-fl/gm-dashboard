@@ -644,12 +644,6 @@ async function refreshXeroTokenWithLock(
       const errorText = await response.text()
       console.error('Xero token refresh failed:', response.status, errorText)
 
-      // Release lock on failure
-      await supabase
-        .from('oauth_token_cache')
-        .update({ refresh_lock_until: null })
-        .eq('credential_id', credentialId)
-
       // If invalid_grant, another request may have already rotated the token
       if (response.status === 400 && errorText.includes('invalid_grant')) {
         console.log('Got invalid_grant — checking if another request already refreshed')
@@ -658,12 +652,33 @@ async function refreshXeroTokenWithLock(
         if (freshCached) {
           const freshExpiry = new Date(freshCached.expires_at)
           if (freshExpiry.getTime() > Date.now() + 60000) {
+            // Release lock — another request successfully refreshed
+            await supabase
+              .from('oauth_token_cache')
+              .update({ refresh_lock_until: null })
+              .eq('credential_id', credentialId)
             console.log('Found fresh cached token from another request')
             return { accessToken: freshCached.access_token, tenantId: creds.tenant_id }
           }
         }
+
+        // No recovery — the stored refresh token is permanently invalid.
+        // Hold the lock for 5 minutes to prevent a cascade of requests all
+        // trying the same dead token. User must reconnect Xero to recover.
+        const cooldown = new Date(Date.now() + 5 * 60 * 1000)
+        console.error('Xero refresh token is invalid — holding lock for 5 minutes. Reconnect Xero to recover.')
+        await supabase
+          .from('oauth_token_cache')
+          .update({ refresh_lock_until: cooldown.toISOString() })
+          .eq('credential_id', credentialId)
+        return null
       }
 
+      // Non-invalid_grant failure — release lock and return null
+      await supabase
+        .from('oauth_token_cache')
+        .update({ refresh_lock_until: null })
+        .eq('credential_id', credentialId)
       return null
     }
 

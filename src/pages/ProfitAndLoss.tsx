@@ -130,11 +130,13 @@ export default function ProfitAndLoss() {
         queryKey: ['pnl', 'weekly', 'current', periods.weekly.current.start, periods.weekly.current.end],
         queryFn: () => fetchPnl(periods.weekly.current.start, periods.weekly.current.end),
         staleTime: PNL_STALE_TIME,
+        retry: false,
       },
       {
         queryKey: ['pnl', 'weekly', 'comparison', periods.weekly.comparison.start, periods.weekly.comparison.end],
         queryFn: () => fetchPnl(periods.weekly.comparison.start, periods.weekly.comparison.end),
         staleTime: PNL_STALE_TIME,
+        retry: false,
       },
     ],
   }) as [UseQueryResult<PnlResponse, Error>, UseQueryResult<PnlResponse, Error>];
@@ -145,11 +147,13 @@ export default function ProfitAndLoss() {
         queryKey: ['pnl', 'monthly', 'current', periods.monthly.current.start, periods.monthly.current.end],
         queryFn: () => fetchPnl(periods.monthly.current.start, periods.monthly.current.end),
         staleTime: PNL_STALE_TIME,
+        retry: false,
       },
       {
         queryKey: ['pnl', 'monthly', 'comparison', periods.monthly.comparison.start, periods.monthly.comparison.end],
         queryFn: () => fetchPnl(periods.monthly.comparison.start, periods.monthly.comparison.end),
         staleTime: PNL_STALE_TIME,
+        retry: false,
       },
     ],
   }) as [UseQueryResult<PnlResponse, Error>, UseQueryResult<PnlResponse, Error>];
@@ -160,11 +164,13 @@ export default function ProfitAndLoss() {
         queryKey: ['pnl', 'yearly', 'current', periods.yearly.current.start, periods.yearly.current.end],
         queryFn: () => fetchPnl(periods.yearly.current.start, periods.yearly.current.end),
         staleTime: PNL_STALE_TIME,
+        retry: false,
       },
       {
         queryKey: ['pnl', 'yearly', 'comparison', periods.yearly.comparison.start, periods.yearly.comparison.end],
         queryFn: () => fetchPnl(periods.yearly.comparison.start, periods.yearly.comparison.end),
         staleTime: PNL_STALE_TIME,
+        retry: false,
       },
     ],
   }) as [UseQueryResult<PnlResponse, Error>, UseQueryResult<PnlResponse, Error>];
@@ -406,7 +412,9 @@ export default function ProfitAndLoss() {
         {/* Error State */}
         {isError && error && (
           <div className="text-red-600">
-            {error.message}
+            {error.message?.includes('not connected')
+              ? 'Xero not connected. Please go to Settings → API Integrations to reconnect your Xero account.'
+              : error.message}
           </div>
         )}
 
