@@ -21,8 +21,6 @@ export interface SquareCredentials {
 }
 
 export interface XeroCredentials {
-  client_id: string;
-  client_secret: string;
   refresh_token: string;
   tenant_id: string;
 }
@@ -364,7 +362,7 @@ async function refreshXeroTokenWithLock(
   try {
     // We have the lock - do the refresh
     console.log('Refreshing Xero access token...');
-    const credentials = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64');
+    const credentials = Buffer.from(`${env.XERO_CLIENT_ID}:${env.XERO_CLIENT_SECRET}`).toString('base64');
     const response = await fetch('https://identity.xero.com/connect/token', {
       method: 'POST',
       headers: {
@@ -428,8 +426,6 @@ async function refreshXeroTokenWithLock(
     if (tokenData.refresh_token && tokenData.refresh_token !== creds.refresh_token) {
       console.log('Xero refresh token rotated, updating stored credentials');
       await saveCredentials(supabase, venue, 'xero', {
-        client_id: creds.client_id,
-        client_secret: creds.client_secret,
         refresh_token: tokenData.refresh_token,
         tenant_id: creds.tenant_id,
       });

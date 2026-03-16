@@ -218,8 +218,6 @@ serve(async (req: Request) => {
         venue,
         "xero",
         {
-          client_id: XERO_CLIENT_ID,
-          client_secret: XERO_CLIENT_SECRET,
           refresh_token: tokens.refreshToken,
           tenant_id: tenantId,
         }
