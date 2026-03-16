@@ -65,6 +65,9 @@ export const config = {
   get appUrl(): string {
     return optionalEnv('APP_URL', 'http://localhost:5173')!
   },
+  get apiBaseUrl(): string | undefined {
+    return optionalEnv('API_BASE_URL')
+  },
   get allowedOrigins(): string[] {
     const origins = optionalEnv('ALLOWED_ORIGINS', '')
     return origins ? origins.split(',').map(s => s.trim()).filter(Boolean) : []

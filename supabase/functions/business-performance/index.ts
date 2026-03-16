@@ -3,7 +3,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-expect-error - Deno remote import types
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.1"
 import { findSaturdayInRange, getSameSaturdayLastYear } from "../_shared/saturday-utils.ts"
-import { getXeroAccessToken } from "../_shared/credentials.ts"
 import { config } from "../_shared/config.ts"
 
 const corsHeaders: Record<string, string> = {
@@ -13,149 +12,11 @@ const corsHeaders: Record<string, string> = {
 }
 
 // =====================================================
-// XERO INTEGRATION - Uses shared credentials module
+// XERO INTEGRATION - Delegates to API server
 // =====================================================
 
 // Default venue for Xero P&L (uses organization-level credentials)
-// All venues in the same org share Xero credentials
 const DEFAULT_VENUE_FOR_XERO = 'manor'
-
-/**
- * Fetch P&L data directly from Xero API
- */
-async function fetchPnlFromXero(
-  accessToken: string,
-  tenantId: string,
-  startDate: string,
-  endDate: string
-): Promise<any> {
-  const params = new URLSearchParams({
-    fromDate: startDate,
-    toDate: endDate,
-  })
-  
-  const url = `https://api.xero.com/api.xro/2.0/Reports/ProfitAndLoss?${params.toString()}`
-  
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'xero-tenant-id': tenantId,
-      'Accept': 'application/json',
-    },
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('Xero P&L API failed:', response.status, errorText)
-    throw new Error(`Xero P&L failed: ${response.status}`)
-  }
-
-  return await response.json()
-}
-
-/**
- * Parse the Xero P&L response into our normalized format
- * (Same parsing logic as backend)
- */
-function parseXeroPnl(data: any, startDate: string, endDate: string): any {
-  let incomeTotal = 0
-  let expenseTotal = 0
-  const categories: Record<string, number> = {}
-  const uncategorized: any[] = []
-
-  const rows = (data?.Reports?.[0]?.Rows || []) as any[]
-
-  const parseAmount = (s: any): number => {
-    if (s == null) return 0
-    const str = String(s).replace(/[,\s]/g, '')
-    if (!str) return 0
-    const negative = /^\(.*\)$/.test(str)
-    const cleaned = str.replace(/[()]/g, '')
-    const n = Number(cleaned)
-    return negative ? -Math.abs(n) : n
-  }
-
-  // Track the current section name for COGS section detection
-  function walk(rows: any[], sectionName: string | null) {
-    for (const r of rows) {
-      if (r.RowType === 'Section') {
-        const title = (r.Title || '').toLowerCase()
-        // Pass the section title down for context
-        walk(r.Rows || [], r.Title || sectionName)
-      } else if (r.RowType === 'Row' && r.Cells) {
-        const label = (r.Cells[0]?.Value || '').toLowerCase()
-        // Pick the last non-null cell as the amount (matches backend logic)
-        const lastCell = [...r.Cells].reverse().find((c: any) => c && c.Value != null)
-        const amount = parseAmount(lastCell?.Value)
-
-        // Skip summary/total rows
-        if (label === 'gross profit' || label === 'net profit' || label.startsWith('total ')) {
-          continue
-        }
-
-        const sectionL = (sectionName || '').toLowerCase()
-
-        // Same logic as backend: income sections vs everything else (expense)
-        const isIncome = sectionL.includes('revenue') || sectionL.includes('income')
-        const isExpense = !isIncome && sectionL !== ''
-
-        if (isIncome) {
-          incomeTotal += amount
-        } else if (isExpense) {
-          expenseTotal += Math.abs(amount)
-
-          // Categorize expenses - patterns must match mapping.ts in apps/api/src/xero/
-          let category = 'other'
-          if (label.includes('w&s') || label.includes('wage') || label.includes('salary') || label.includes('salaries') || label.includes('payroll') || label.includes('staff') || label.includes('superannuation') || label.includes('super ')) {
-            category = 'wages'
-          } else if (label.includes('cost of goods') || label.includes('cogs') || label.includes('purchases') || label.includes('stock')) {
-            category = 'cogs'
-          } else if (label.includes('security')) {
-            category = 'security'
-          }
-
-          // Also check section name for COGS (Direct Costs, Cost of Sales sections)
-          // Same as backend routes.ts lines 218-226
-          if (category === 'other' &&
-              (sectionL.includes('cost of sales') ||
-               sectionL.includes('cost of goods') ||
-               sectionL.includes('direct costs'))) {
-            category = 'cogs'
-          }
-
-          categories[category] = (categories[category] || 0) + Math.abs(amount)
-          if (category === 'other') {
-            uncategorized.push({ label, amount })
-          }
-        }
-      } else if (r.RowType === 'SummaryRow' && r.Cells) {
-        // Skip summary rows, we calculate our own totals
-      }
-    }
-  }
-
-  walk(rows, null)
-
-  const netProfit = incomeTotal - expenseTotal
-
-  console.log('Parsed Xero P&L:', {
-    incomeTotal,
-    expenseTotal,
-    netProfit,
-    categories,
-  })
-
-  return {
-    period: { start: startDate, end: endDate },
-    totals: {
-      revenue: incomeTotal,
-      expenses: expenseTotal,
-      netProfit,
-    },
-    categories,
-    uncategorized,
-  }
-}
 
 interface BusinessPerformanceData {
   period: {
@@ -358,40 +219,44 @@ function calculateDateRanges(): {
 }
 
 /**
- * Fetch P&L data directly from Xero API
- * Uses the new credentials system from venue_api_credentials
+ * Fetch P&L data via the API server's /xero/pnl endpoint
+ * This avoids duplicating P&L parsing logic between edge functions and the API server
  */
-async function fetchPnlData(supabase: any, startDate: Date, endDate: Date): Promise<any> {
+async function fetchPnlData(_supabase: any, startDate: Date, endDate: Date): Promise<any> {
   const startDateStr = startDate.toISOString().split('T')[0]
   const endDateStr = endDate.toISOString().split('T')[0]
 
+  const apiBaseUrl = config.apiBaseUrl
+  if (!apiBaseUrl) {
+    console.error('API_BASE_URL not configured, cannot fetch P&L data')
+    return null
+  }
+
   try {
-    console.log(`Fetching P&L data from Xero: ${startDateStr} to ${endDateStr}`)
+    console.log(`Fetching P&L data via API server: ${startDateStr} to ${endDateStr}`)
 
-    // Get Xero access token using the new credentials system
-    // Uses org-level credentials (any venue in the org will work)
-    const xeroConnection = await getXeroAccessToken(supabase, DEFAULT_VENUE_FOR_XERO)
+    const response = await fetch(`${apiBaseUrl}/xero/pnl`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        startDate: startDateStr,
+        endDate: endDateStr,
+        refresh: true,
+        venue: DEFAULT_VENUE_FOR_XERO,
+      }),
+    })
 
-    if (!xeroConnection) {
-      console.error('No Xero connection available')
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('API server P&L request failed:', response.status, errorText)
       return null
     }
 
-    // Fetch raw P&L from Xero
-    const rawPnl = await fetchPnlFromXero(
-      xeroConnection.accessToken,
-      xeroConnection.tenantId,
-      startDateStr,
-      endDateStr
-    )
-
-    // Parse into our format
-    const parsedPnl = parseXeroPnl(rawPnl, startDateStr, endDateStr)
-
-    console.log('P&L data parsed:', JSON.stringify(parsedPnl))
-    return parsedPnl
+    const data = await response.json()
+    console.log('P&L data received from API server:', JSON.stringify(data))
+    return data
   } catch (error) {
-    console.error('Error fetching P&L data from Xero:', error)
+    console.error('Error fetching P&L data from API server:', error)
     return null
   }
 }
