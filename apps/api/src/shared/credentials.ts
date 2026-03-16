@@ -112,7 +112,8 @@ async function getOrganizationForVenue(supabase: SupabaseClient, venue: string):
 export async function getCredentials<T extends CredentialData>(
   supabase: SupabaseClient,
   venue: string | null,
-  integrationType: IntegrationType
+  integrationType: IntegrationType,
+  resolvedOrgId?: string
 ): Promise<T | null> {
   try {
     let data: CredentialRow | null = null;
@@ -134,11 +135,11 @@ export async function getCredentials<T extends CredentialData>(
       error = result.error;
     } else if (integrationType === 'square' || integrationType === 'xero') {
       // Per-organization credentials
-      if (!venue) {
+      if (!venue && !resolvedOrgId) {
         console.warn(`getCredentials: venue required for ${integrationType} lookup`);
         return null;
       }
-      const orgId = await getOrganizationForVenue(supabase, venue);
+      const orgId = resolvedOrgId || await getOrganizationForVenue(supabase, venue!);
       if (!orgId) {
         console.warn(`getCredentials: no organization found for venue ${venue}`);
         return null;
@@ -192,7 +193,8 @@ export async function saveCredentials<T extends CredentialData>(
   venue: string | null,
   integrationType: IntegrationType,
   credentials: T,
-  userId?: string
+  userId?: string,
+  resolvedOrgId?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const encrypted = encryptToken(JSON.stringify(credentials));
@@ -207,10 +209,10 @@ export async function saveCredentials<T extends CredentialData>(
       scopeData = { venue, organization_id: null };
     } else if (integrationType === 'square' || integrationType === 'xero') {
       // Per-organization credentials
-      if (!venue) {
+      if (!venue && !resolvedOrgId) {
         return { success: false, error: `Venue required for ${integrationType} credentials lookup` };
       }
-      const orgId = await getOrganizationForVenue(supabase, venue);
+      const orgId = resolvedOrgId || await getOrganizationForVenue(supabase, venue!);
       if (!orgId) {
         return { success: false, error: `No organization found for venue ${venue}` };
       }
@@ -255,9 +257,10 @@ export async function saveCredentials<T extends CredentialData>(
  */
 export async function getXeroCredentials(
   supabase: SupabaseClient,
-  venue: string
+  venue: string,
+  resolvedOrgId?: string
 ): Promise<XeroCredentials | null> {
-  return getCredentials<XeroCredentials>(supabase, venue, 'xero');
+  return getCredentials<XeroCredentials>(supabase, venue, 'xero', resolvedOrgId);
 }
 
 /**
@@ -266,10 +269,11 @@ export async function getXeroCredentials(
 async function getCredentialId(
   supabase: SupabaseClient,
   venue: string,
-  integrationType: IntegrationType
+  integrationType: IntegrationType,
+  resolvedOrgId?: string
 ): Promise<string | null> {
   if (integrationType === 'xero' || integrationType === 'square') {
-    const orgId = await getOrganizationForVenue(supabase, venue);
+    const orgId = resolvedOrgId || await getOrganizationForVenue(supabase, venue);
     if (!orgId) return null;
 
     const { data } = await supabase
@@ -329,7 +333,8 @@ async function refreshXeroTokenWithLock(
   venue: string,
   credentialId: string,
   creds: XeroCredentials,
-  retryCount = 0
+  retryCount = 0,
+  resolvedOrgId?: string
 ): Promise<{ accessToken: string; tenantId: string } | null> {
   const MAX_RETRIES = 3;
   if (retryCount >= MAX_RETRIES) {
@@ -428,7 +433,7 @@ async function refreshXeroTokenWithLock(
       await saveCredentials(supabase, venue, 'xero', {
         refresh_token: tokenData.refresh_token,
         tenant_id: creds.tenant_id,
-      });
+      }, undefined, resolvedOrgId);
     }
 
     console.log('Xero token refreshed and cached successfully');
@@ -461,14 +466,21 @@ export async function getXeroAccessToken(
   venue: string,
   retryCount = 0
 ): Promise<{ accessToken: string; tenantId: string } | null> {
-  const creds = await getXeroCredentials(supabase, venue);
+  // Resolve org once and thread through all sub-calls to avoid repeated lookups
+  const orgId = await getOrganizationForVenue(supabase, venue);
+  if (!orgId) {
+    console.log(`No organization found for venue: ${venue}`);
+    return null;
+  }
+
+  const creds = await getXeroCredentials(supabase, venue, orgId);
   if (!creds) {
     console.log(`No Xero credentials found for venue: ${venue}`);
     return null;
   }
 
   // Get the credential ID for cache lookup
-  const credentialId = await getCredentialId(supabase, venue, 'xero');
+  const credentialId = await getCredentialId(supabase, venue, 'xero', orgId);
   if (!credentialId) {
     console.log(`No credential ID found for Xero (venue: ${venue})`);
     return null;
@@ -491,5 +503,5 @@ export async function getXeroAccessToken(
   }
 
   // Token expired or not cached - refresh with locking
-  return refreshXeroTokenWithLock(supabase, venue, credentialId, creds, retryCount);
+  return refreshXeroTokenWithLock(supabase, venue, credentialId, creds, retryCount, orgId);
 }
