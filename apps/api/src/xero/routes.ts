@@ -195,7 +195,7 @@ xero.post('/pnl', async (c) => {
     raw: data ?? undefined,
   };
   // Save snapshot
-  await supabaseService
+  const { error: upsertErr } = await supabaseService
     .from('xero_pnl_snapshots')
     .upsert({
       tenant_id: creds.tenant_id,
@@ -204,5 +204,8 @@ xero.post('/pnl', async (c) => {
       result_json: result,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tenant_id,start_date,end_date' });
+  if (upsertErr) {
+    console.error('[Xero] Failed to save P&L snapshot:', upsertErr.message);
+  }
   return c.json({ ...result, meta: { cached: false, lastUpdated: new Date().toISOString() } });
 });
