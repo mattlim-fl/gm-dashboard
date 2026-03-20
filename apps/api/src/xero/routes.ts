@@ -78,6 +78,9 @@ xero.post('/pnl', async (c) => {
       .eq('start_date', input.data.startDate)
       .eq('end_date', input.data.endDate)
       .maybeSingle();
+    if (snapErr) {
+      console.error('[Xero] Snapshot cache read failed, falling back to live fetch:', snapErr.message);
+    }
     if (!snapErr && existing?.result_json) {
       const withMeta = { ...existing.result_json, meta: { cached: true, lastUpdated: existing.updated_at } };
       return c.json(withMeta);
@@ -104,7 +107,12 @@ xero.post('/pnl', async (c) => {
   const categories: Record<string, number> = {};
   const uncategorized: UncategorizedItem[] = [];
 
-  const rows: XeroPnlRow[] = data?.Reports?.[0]?.Rows || [];
+  if (!data?.Reports?.[0]) {
+    console.error('[Xero] P&L response missing Reports data:', JSON.stringify(data).slice(0, 500));
+    return c.json({ error: 'Xero returned an unexpected P&L response format' }, 502);
+  }
+
+  const rows: XeroPnlRow[] = data.Reports[0].Rows || [];
 
   const parseAmount = (s: string | number | undefined | null): number => {
     if (s == null) return 0;
@@ -195,7 +203,7 @@ xero.post('/pnl', async (c) => {
     raw: data ?? undefined,
   };
   // Save snapshot
-  await supabaseService
+  const { error: upsertErr } = await supabaseService
     .from('xero_pnl_snapshots')
     .upsert({
       tenant_id: creds.tenant_id,
@@ -204,5 +212,8 @@ xero.post('/pnl', async (c) => {
       result_json: result,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tenant_id,start_date,end_date' });
+  if (upsertErr) {
+    console.error('[Xero] Failed to save P&L snapshot:', upsertErr.message);
+  }
   return c.json({ ...result, meta: { cached: false, lastUpdated: new Date().toISOString() } });
 });
