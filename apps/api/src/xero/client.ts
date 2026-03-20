@@ -6,11 +6,15 @@ export async function getAccounts(accessToken: string, tenantId: string) {
       Accept: "application/json",
     },
   });
+  const text = await resp.text();
   if (!resp.ok) {
-    const text = await resp.text();
     throw new Error(`Xero accounts failed: ${resp.status} ${text}`);
   }
-  return await resp.json();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Xero accounts returned invalid JSON (status ${resp.status}): ${text.slice(0, 200)}`);
+  }
 }
 
 export async function getProfitAndLoss(
@@ -34,9 +38,13 @@ export async function getProfitAndLoss(
       Accept: "application/json",
     },
   });
+  const text = await resp.text();
   if (!resp.ok) {
-    const text = await resp.text();
     throw new Error(`Xero P&L failed: ${resp.status} ${text}`);
   }
-  return await resp.json();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Xero P&L returned invalid JSON (status ${resp.status}): ${text.slice(0, 200)}`);
+  }
 }
