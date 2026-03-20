@@ -893,6 +893,7 @@ serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}))
     const testEmailOnly = body.test_email_only === true
     const testWhatsAppOnly = body.test_whatsapp_only === true
+    const testRecipient = typeof body.test_recipient === 'string' ? body.test_recipient : null
     const previewOnly = body.preview_only === true
 
     // Fetch notification settings
@@ -966,12 +967,13 @@ serve(async (req: Request) => {
 
     // Generate and send emails (only if not in WhatsApp-only test mode)
     const emailResults: { recipient: string; success: boolean }[] = []
-    if (!testWhatsAppOnly && notificationSettings.recipient_emails && notificationSettings.recipient_emails.length > 0) {
+    const emailRecipients = testRecipient ? [testRecipient] : (notificationSettings.recipient_emails || [])
+    if (!testWhatsAppOnly && emailRecipients.length > 0) {
       console.log('Generating email HTML...')
       const emailHtml = generateEmailHtml(performanceData)
       const subject = `Weekly Performance Report - ${performanceData.saturdayLabels.current.replace('Saturday - ', '')}`
 
-      for (const email of notificationSettings.recipient_emails) {
+      for (const email of emailRecipients) {
         console.log(`Sending email to ${email}...`)
         const success = await sendEmail(supabase, email, subject, emailHtml)
         emailResults.push({ recipient: email, success })
