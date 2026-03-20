@@ -107,7 +107,12 @@ xero.post('/pnl', async (c) => {
   const categories: Record<string, number> = {};
   const uncategorized: UncategorizedItem[] = [];
 
-  const rows: XeroPnlRow[] = data?.Reports?.[0]?.Rows || [];
+  if (!data?.Reports?.[0]) {
+    console.error('[Xero] P&L response missing Reports data:', JSON.stringify(data).slice(0, 500));
+    return c.json({ error: 'Xero returned an unexpected P&L response format' }, 502);
+  }
+
+  const rows: XeroPnlRow[] = data.Reports[0].Rows || [];
 
   const parseAmount = (s: string | number | undefined | null): number => {
     if (s == null) return 0;
