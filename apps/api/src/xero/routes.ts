@@ -78,6 +78,9 @@ xero.post('/pnl', async (c) => {
       .eq('start_date', input.data.startDate)
       .eq('end_date', input.data.endDate)
       .maybeSingle();
+    if (snapErr) {
+      console.error('[Xero] Snapshot cache read failed, falling back to live fetch:', snapErr.message);
+    }
     if (!snapErr && existing?.result_json) {
       const withMeta = { ...existing.result_json, meta: { cached: true, lastUpdated: existing.updated_at } };
       return c.json(withMeta);
