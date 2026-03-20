@@ -24,6 +24,7 @@ export async function getProfitAndLoss(
   const params = new URLSearchParams({
     fromDate: startDate,
     toDate: endDate,
+    paymentsOnly: 'true',
   });
   const url = `${base}?${params.toString()}`;
   const resp = await fetch(url, {
