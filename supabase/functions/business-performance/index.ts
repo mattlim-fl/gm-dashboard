@@ -71,6 +71,11 @@ interface BusinessPerformanceData {
     attendance: number
     spendPerHead: number
   }
+  benchmarks: {
+    wages: number
+    cogs: number
+    security: number
+  }
   changes: {
     revenuePercent: number
     revenueVsAvg: number
@@ -298,6 +303,17 @@ async function fetchRevenueAndAttendance(
 async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerformanceData> {
   const dateRanges = calculateDateRanges()
 
+  // Fetch benchmarks
+  const { data: benchmarkRows } = await supabase
+    .from('cost_benchmarks')
+    .select('category, benchmark_percent')
+  const benchmarks = { wages: 0, cogs: 0, security: 0 }
+  for (const row of benchmarkRows || []) {
+    if (row.category === 'wages' || row.category === 'cogs' || row.category === 'security') {
+      benchmarks[row.category] = Number(row.benchmark_percent) || 0
+    }
+  }
+
   // Fetch P&L and revenue/attendance for current, previous, year-ago, and 4 averaging weeks
   const [currentPnl, previousPnl, yearAgoPnl, currentMetrics, previousMetrics, yearAgoMetrics, ...avgData] = await Promise.all([
     fetchPnlData(supabase, dateRanges.currentStart, dateRanges.currentEnd),
@@ -446,6 +462,7 @@ async function fetchBusinessPerformanceData(supabase: any): Promise<BusinessPerf
       end: formatDate(dateRanges.currentEnd),
     },
     saturdayLabels,
+    benchmarks,
     current: {
       revenue: Math.round(displayCurrentRevenue * 100), // Store as cents for formatCurrency
       wages: Math.round(currentWages * 100),
@@ -523,9 +540,9 @@ function generateWhatsAppMessage(data: BusinessPerformanceData): string {
 
 ${data.saturdayLabels.current}
 Revenue - ${formatCurrency(data.current.revenue)} (${formatChange(data.changes.revenueVsAvg)} vs avg)
-Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}%, ${formatChange(data.changes.wagesVsAvg)} vs avg)
-COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}%, ${formatChange(data.changes.cogsVsAvg)} vs avg)
-Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}%, ${formatChange(data.changes.securityVsAvg)} vs avg)
+Wages - ${formatCurrency(data.current.wages)} (${data.current.wagesPercent.toFixed(1)}%${data.benchmarks.wages ? ` vs ${data.benchmarks.wages}% target` : ''}, ${formatChange(data.changes.wagesVsAvg)} vs avg)
+COGS - ${formatCurrency(data.current.cogs)} (${data.current.cogsPercent.toFixed(1)}%${data.benchmarks.cogs ? ` vs ${data.benchmarks.cogs}% target` : ''}, ${formatChange(data.changes.cogsVsAvg)} vs avg)
+Security - ${formatCurrency(data.current.security)} (${data.current.securityPercent.toFixed(1)}%${data.benchmarks.security ? ` vs ${data.benchmarks.security}% target` : ''}, ${formatChange(data.changes.securityVsAvg)} vs avg)
 Attendance - ${data.current.attendance.toLocaleString()} (${formatChange(data.changes.attendanceVsAvg)} vs avg)
 Spend Per Head - ${formatCurrency(data.current.spendPerHead)} (${formatChange(data.changes.spendPerHeadVsAvg)} vs avg)
 
@@ -660,7 +677,7 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
     {
       metric: 'Wages',
       value: formatCurrency(data.current.wages),
-      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.wagesPercent.toFixed(1)}%)</span>`,
+      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.wagesPercent.toFixed(1)}%${data.benchmarks.wages ? ` vs ${data.benchmarks.wages}%` : ''})</span>`,
       wow: generateIndicator(data.changes.wagesPercentChange, true, true),
       vsAvg: generateIndicator(data.changes.wagesVsAvg, true, avgCostDataAvailable),
       yoy: generateIndicator(data.changes.wagesYoY, true, yoyCostDataAvailable),
@@ -668,7 +685,7 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
     {
       metric: 'COGS',
       value: formatCurrency(data.current.cogs),
-      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.cogsPercent.toFixed(1)}%)</span>`,
+      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.cogsPercent.toFixed(1)}%${data.benchmarks.cogs ? ` vs ${data.benchmarks.cogs}%` : ''})</span>`,
       wow: generateIndicator(data.changes.cogsPercentChange, true, true),
       vsAvg: generateIndicator(data.changes.cogsVsAvg, true, avgCostDataAvailable),
       yoy: generateIndicator(data.changes.cogsYoY, true, yoyCostDataAvailable),
@@ -676,7 +693,7 @@ function generateEmailHtml(data: BusinessPerformanceData): string {
     {
       metric: 'Security',
       value: formatCurrency(data.current.security),
-      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.securityPercent.toFixed(1)}%)</span>`,
+      valueSuffix: ` <span style="color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:13px;">(${data.current.securityPercent.toFixed(1)}%${data.benchmarks.security ? ` vs ${data.benchmarks.security}%` : ''})</span>`,
       wow: generateIndicator(data.changes.securityPercentChange, true, true),
       vsAvg: generateIndicator(data.changes.securityVsAvg, true, avgCostDataAvailable),
       yoy: generateIndicator(data.changes.securityYoY, true, yoyCostDataAvailable),
