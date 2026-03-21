@@ -30,7 +30,7 @@ interface NotificationCardProps {
   functionName: string;
   onUpdate: (settings: NotificationSettingsData) => void;
   onSave: () => void;
-  onTest: (type: 'email' | 'whatsapp') => void;
+  onTest: (type: 'email' | 'whatsapp', recipient?: string) => void;
   onPreview: () => void;
   onScheduleChange: (dayOfWeek: number, hourAwst: number) => void;
   saving: boolean;
@@ -55,6 +55,7 @@ export function NotificationCard({
 }: NotificationCardProps) {
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [testEmail, setTestEmail] = useState('');
   const [tempDayOfWeek, setTempDayOfWeek] = useState<number>(settings.schedule_day_of_week ?? 0);
   const [tempHourAwst, setTempHourAwst] = useState<number>(settings.schedule_hour_awst ?? 6);
   const { toast } = useToast();
@@ -356,24 +357,6 @@ export function NotificationCard({
               )}
             </Button>
             <Button
-              onClick={() => onTest('email')}
-              variant="outline"
-              disabled={testing.email || !settings.enabled || settings.recipient_emails.length === 0}
-              className="flex-1"
-            >
-              {testing.email ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Test Email
-                </>
-              )}
-            </Button>
-            <Button
               onClick={() => onTest('whatsapp')}
               variant="outline"
               disabled={testing.whatsapp || !settings.enabled || settings.whatsapp_numbers.length === 0}
@@ -388,6 +371,40 @@ export function NotificationCard({
                 <>
                   <Send className="mr-2 h-4 w-4" />
                   Test WhatsApp
+                </>
+              )}
+            </Button>
+          </div>
+          <div className="flex space-x-2">
+            <Input
+              type="email"
+              placeholder="Enter email for test send"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (testEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) {
+                    onTest('email', testEmail);
+                  }
+                }
+              }}
+              disabled={testing.email || !settings.enabled}
+            />
+            <Button
+              onClick={() => onTest('email', testEmail)}
+              variant="outline"
+              disabled={testing.email || !settings.enabled || !testEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)}
+            >
+              {testing.email ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Test Email
                 </>
               )}
             </Button>

@@ -109,17 +109,25 @@ export function NotificationSettings() {
     }
   }
 
-  async function testNotification(type: 'trade_report' | 'business_performance', method: 'email' | 'whatsapp') {
+  async function testNotification(type: 'trade_report' | 'business_performance', method: 'email' | 'whatsapp', recipient?: string) {
     const settings = type === 'trade_report' ? tradeReportSettings : businessPerfSettings;
     const functionName = type === 'trade_report' ? 'trade-report' : 'business-performance';
 
     if (!settings) return;
 
-    const recipients = method === 'email' ? settings.recipient_emails : settings.whatsapp_numbers;
-    if (recipients.length === 0) {
+    if (method === 'email' && !recipient) {
+      toast({
+        title: 'No Recipient',
+        description: 'Please enter an email address for the test',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (method === 'whatsapp' && settings.whatsapp_numbers.length === 0) {
       toast({
         title: 'No Recipients',
-        description: `Please add at least one ${method === 'email' ? 'email' : 'WhatsApp number'} first`,
+        description: 'Please add at least one WhatsApp number first',
         variant: 'destructive',
       });
       return;
@@ -133,6 +141,7 @@ export function NotificationSettings() {
         body: {
           test_email_only: method === 'email',
           test_whatsapp_only: method === 'whatsapp',
+          ...(method === 'email' && recipient ? { test_recipient: recipient } : {}),
         },
       });
 
@@ -140,7 +149,9 @@ export function NotificationSettings() {
 
       toast({
         title: 'Success',
-        description: `Test ${method} sent to ${recipients.length} recipient(s)`,
+        description: method === 'email'
+          ? `Test email sent to ${recipient}`
+          : `Test WhatsApp sent to ${settings.whatsapp_numbers.length} recipient(s)`,
       });
     } catch (error) {
       console.error(`Error sending test ${method}:`, error);
@@ -286,7 +297,7 @@ export function NotificationSettings() {
             functionName="trade-report"
             onUpdate={setTradeReportSettings}
             onSave={() => saveSettings('trade_report')}
-            onTest={(method) => testNotification('trade_report', method)}
+            onTest={(method, recipient) => testNotification('trade_report', method, recipient)}
             onPreview={() => previewNotification('trade_report')}
             onScheduleChange={(day, hour) => updateSchedule('trade_report', day, hour)}
             saving={saving.tradeReport}
@@ -304,7 +315,7 @@ export function NotificationSettings() {
             functionName="business-performance"
             onUpdate={setBusinessPerfSettings}
             onSave={() => saveSettings('business_performance')}
-            onTest={(method) => testNotification('business_performance', method)}
+            onTest={(method, recipient) => testNotification('business_performance', method, recipient)}
             onPreview={() => previewNotification('business_performance')}
             onScheduleChange={(day, hour) => updateSchedule('business_performance', day, hour)}
             saving={saving.businessPerf}
